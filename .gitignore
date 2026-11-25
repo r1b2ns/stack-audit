@@ -9,3 +9,5 @@ xcuserdata/
 .build/
 .swiftpm/
 *.xcframework.zip
+samples/ios/*.xcodeproj/
+samples/ios/Sources/Info.plist
