@@ -27,6 +27,7 @@ public enum StackAudit {
         public var maxBodySize: Int64 = 1024 * 1024
         public var maxStorage: Int64 = 100 * 1024 * 1024
         public var shakeToOpen: Bool = true
+        public var watchStandardUserDefaults: Bool = true
 
         public init() {}
     }
@@ -60,6 +61,19 @@ public enum StackAudit {
         if configuration.network == .automatic {
             NetworkCapture.enable()
         }
+        if configuration.watchStandardUserDefaults {
+            watch(UserDefaults.standard)
+        }
+    }
+
+    private static var watchers: [String: UserDefaultsWatcher] = [:]
+
+    public static func watch(_ defaults: UserDefaults, suiteName: String? = nil) {
+        let name = suiteName ?? "standard"
+        guard watchers[name] == nil else { return }
+        let watcher = UserDefaultsWatcher(defaults: defaults, name: name, domain: suiteName ?? Bundle.main.bundleIdentifier)
+        watcher.start()
+        watchers[name] = watcher
     }
 
     @discardableResult

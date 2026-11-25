@@ -3,6 +3,9 @@ package io.github.r1b2ns.stackaudit.apple
 import io.github.r1b2ns.stackaudit.Access
 import io.github.r1b2ns.stackaudit.BlobCipher
 import io.github.r1b2ns.stackaudit.StackAuditIos
+import io.github.r1b2ns.stackaudit.DatabaseStatement
+import io.github.r1b2ns.stackaudit.StorageChange
+import io.github.r1b2ns.stackaudit.StorageOperation
 import io.github.r1b2ns.stackaudit.WebSocketFrame
 import io.github.r1b2ns.stackaudit.WebSocketKind
 import io.github.r1b2ns.stackaudit.Header
@@ -143,6 +146,48 @@ public object StackAuditBridge {
                 isText = isText,
                 code = code.takeIf { it > 0 },
                 reason = reason,
+                error = error,
+            ),
+        )
+    }
+
+    public val isCapturingStorage: Boolean get() = StackAudit.isCapturingStorage
+
+    public val isCapturingDatabase: Boolean get() = StackAudit.isCapturingDatabase
+
+    public fun recordStorage(
+        source: String,
+        store: String,
+        key: String?,
+        operation: String,
+        oldValue: String?,
+        newValue: String?,
+        valueType: String?,
+        timestampMs: Long,
+    ) {
+        val parsed = StorageOperation.entries.firstOrNull { it.name.equals(operation, ignoreCase = true) } ?: return
+        StackAudit.record(StorageChange(source, store, key, parsed, timestampMs, oldValue, newValue, valueType))
+    }
+
+    public fun recordDatabase(
+        source: String,
+        database: String,
+        sql: String,
+        arguments: List<String?>,
+        durationMs: Long,
+        rowsAffected: Long,
+        error: String?,
+        timestampMs: Long,
+    ) {
+        StackAudit.record(
+            DatabaseStatement(
+                source = source,
+                database = database,
+                sql = sql,
+                timestamp = timestampMs,
+                arguments = arguments,
+                durationMs = durationMs.takeIf { it >= 0 },
+                rowsAffected = rowsAffected.takeIf { it >= 0 },
                 error = error,
             ),
         )
