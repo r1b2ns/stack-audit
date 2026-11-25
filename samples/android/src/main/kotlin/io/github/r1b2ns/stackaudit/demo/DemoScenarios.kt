@@ -11,6 +11,10 @@ import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.db.SqlSchema
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import io.github.r1b2ns.stackaudit.AnalyticsTracker
+import io.github.r1b2ns.stackaudit.FlagProvider
+import io.github.r1b2ns.stackaudit.FlagValue
+import io.github.r1b2ns.stackaudit.StackAudit
 import io.github.r1b2ns.stackaudit.ktor.auditedWebSocket
 import io.github.r1b2ns.stackaudit.sqldelight.audited
 import io.github.r1b2ns.stackaudit.storage.auditedSharedPreferences
@@ -35,7 +39,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-enum class Client { OkHttp, Ktor, OkHttpWebSocket, KtorWebSocket, SharedPreferences, SqlDelight }
+enum class Client { OkHttp, Ktor, OkHttpWebSocket, KtorWebSocket, SharedPreferences, SqlDelight, Analytics, Flags }
 
 data class Scenario(
     val title: String,
@@ -73,6 +77,8 @@ object DemoScenarios {
             Scenario("Ktor WebSocket echo", Client.KtorWebSocket, "WS", ECHO),
             Scenario("SharedPreferences write", Client.SharedPreferences, "PREFS", "local://demo_prefs"),
             Scenario("SQLDelight statements", Client.SqlDelight, "SQL", "local://demo.db"),
+            Scenario("Analytics events", Client.Analytics, "EVENT", "local://analytics"),
+            Scenario("Feature flags", Client.Flags, "FLAG", "local://flags"),
         )
 }
 
@@ -98,6 +104,19 @@ class DemoRunner(
     private val context: Context,
 ) {
     private val okHttp = OkHttpClient.Builder().audited().build()
+    private val analytics =
+        StackAudit.analytics.wrap(AnalyticsTracker { name, params -> android.util.Log.d("DemoAnalytics", "$name $params") }, "demo")
+    private val flags =
+        StackAudit.flags.wrap(
+            FlagProvider { key ->
+                when (key) {
+                    "new_checkout" -> FlagValue.Bool(true)
+                    "cart_limit" -> FlagValue.Number(25.0)
+                    else -> null
+                }
+            },
+            "demo_remote",
+        )
     private val database by lazy {
         AndroidSqliteDriver(DemoSchema, context, "demo.db").audited("demo.db")
     }
@@ -124,6 +143,18 @@ class DemoRunner(
                     prefs.edit().putString("theme", if (prefs.getString("theme", "light") == "light") "dark" else "light").apply()
                     prefs.edit().putString("access_token", "abcdefghijkl1234").putInt("launches", prefs.getInt("launches", 0) + 1).apply()
                     "3 writes"
+                }
+                Client.Analytics -> {
+                    analytics.track("purchase", mapOf("value" to 49.9, "currency" to "BRL"))
+                    analytics.track("purchase", mapOf("value" to "49.9"))
+                    analytics.track("login", mapOf("method" to "email", "password" to "hunter2"))
+                    "3 events"
+                }
+                Client.Flags -> {
+                    val checkout = flags.bool("new_checkout", default = false)
+                    val limit = flags.number("cart_limit", default = 10.0)
+                    val banner = flags.string("banner_text", default = "Welcome")
+                    "new_checkout=$checkout · cart_limit=${limit.toInt()} · banner=$banner"
                 }
                 Client.SqlDelight ->
                     withContext(Dispatchers.IO) {

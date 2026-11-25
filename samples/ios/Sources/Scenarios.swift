@@ -10,6 +10,8 @@ enum DemoClient: String, CaseIterable {
     case webSocket = "URLSession WebSocket"
     case userDefaults = "UserDefaults"
     case sqlite = "SQLite"
+    case analytics = "Analytics"
+    case flags = "Feature flags"
 }
 
 struct Scenario: Identifiable, Hashable {
@@ -56,10 +58,23 @@ enum Scenarios {
         Scenario(title: "WebSocket echo", client: .webSocket, method: "WS", url: "wss://echo.websocket.org/?token=abcdefghijklmnop"),
         Scenario(title: "UserDefaults write", client: .userDefaults, method: "DEFAULTS", url: "local://standard"),
         Scenario(title: "SQLite statements", client: .sqlite, method: "SQL", url: "local://demo.sqlite"),
+        Scenario(title: "Analytics events", client: .analytics, method: "EVENT", url: "local://analytics"),
+        Scenario(title: "Feature flags", client: .flags, method: "FLAG", url: "local://flags"),
     ]
 }
 
+struct DemoRemoteConfig: StackAuditFlagProvider {
+    func value(forKey key: String) -> Any? {
+        switch key {
+        case "new_checkout": return true
+        case "cart_limit": return 25
+        default: return nil
+        }
+    }
+}
+
 final class DemoRunner {
+    private let flags = StackAuditFlags(provider: DemoRemoteConfig(), name: "demo_remote")
     private let session = URLSession(configuration: .default)
     private let alamofire = Session()
     private let pinned = Session(
@@ -94,6 +109,16 @@ final class DemoRunner {
             return "3 writes"
         case .sqlite:
             return sqliteDemo()
+        case .analytics:
+            StackAuditAnalytics.record(provider: "demo", name: "purchase", params: ["value": 49.9, "currency": "BRL"])
+            StackAuditAnalytics.record(provider: "demo", name: "purchase", params: ["value": "49.9"])
+            StackAuditAnalytics.record(provider: "demo", name: "login", params: ["method": "email", "password": "hunter2"])
+            return "3 events"
+        case .flags:
+            let checkout = flags.bool("new_checkout", default: false)
+            let limit = flags.number("cart_limit", default: 10)
+            let banner = flags.string("banner_text", default: "Welcome")
+            return "new_checkout=\(checkout) · cart_limit=\(Int(limit)) · banner=\(banner)"
         }
     }
 
