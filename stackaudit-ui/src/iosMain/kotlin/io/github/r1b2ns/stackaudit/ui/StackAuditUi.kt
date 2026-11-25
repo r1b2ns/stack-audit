@@ -16,7 +16,8 @@ public object StackAuditUi {
         StackAudit.registerViewer { present() }
     }
 
-    public fun viewController(onClose: () -> Unit = {}): UIViewController = ComposeUIViewController { StackAuditScreen(onClose) }
+    public fun viewController(onClose: () -> Unit = {}): UIViewController =
+        ComposeUIViewController(configure = { enforceStrictPlistSanityCheck = false }) { StackAuditScreen(onClose) }
 
     public fun present() {
         val top = topViewController() ?: return
