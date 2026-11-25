@@ -24,3 +24,6 @@ include(
     ":stackaudit-apple",
     ":stackaudit-noop",
 )
+
+include(":sample-android")
+project(":sample-android").projectDir = file("samples/android")

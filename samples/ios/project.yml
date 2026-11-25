@@ -1,0 +1,48 @@
+name: StackAuditDemo
+options:
+  bundleIdPrefix: io.github.r1b2ns
+  deploymentTarget:
+    iOS: "15.0"
+packages:
+  StackAudit:
+    path: ../..
+  Alamofire:
+    url: https://github.com/Alamofire/Alamofire
+    from: 5.10.0
+targets:
+  StackAuditDemo:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: StackAudit
+      - package: Alamofire
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: StackAudit Demo
+        UILaunchScreen: {}
+        CADisableMinimumFrameDurationOnPhone: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.r1b2ns.stackaudit.demo
+        SWIFT_VERSION: "5.0"
+        CODE_SIGNING_ALLOWED: NO
+  StackAuditDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: StackAuditDemo
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  StackAuditDemo:
+    build:
+      targets:
+        StackAuditDemo: all
+    test:
+      targets: [StackAuditDemoTests]
