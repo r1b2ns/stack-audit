@@ -53,6 +53,7 @@ import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpPayload
 import io.github.r1b2ns.stackaudit.MetaPayload
 import io.github.r1b2ns.stackaudit.StackAudit
+import io.github.r1b2ns.stackaudit.WebSocketPayload
 import kotlinx.coroutines.launch
 
 @Composable
@@ -109,7 +110,7 @@ private fun EventRow(
     event: AuditEventSummary,
     onClick: () -> Unit,
 ) {
-    val tone = palette.tone(Presentation.tone(event.category, event.status))
+    val tone = palette.tone(Presentation.tone(event.category, event.status, event.title))
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).background(palette.surface)) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(4.dp).height(36.dp).clip(RoundedCornerShape(2.dp)).background(tone))
@@ -143,7 +144,8 @@ private fun EventDetail(
         val loaded = StackAudit.event(id)
         event = loaded
         val http = loaded?.payload as? HttpPayload
-        requestBody = http?.requestBody?.let { Presentation.body(it, StackAudit.body(it)) }
+        val socket = loaded?.payload as? WebSocketPayload
+        requestBody = (http?.requestBody ?: socket?.body)?.let { Presentation.body(it, StackAudit.body(it)) }
         responseBody = http?.responseBody?.let { Presentation.body(it, StackAudit.body(it)) }
     }
     val clipboard = LocalClipboardManager.current
@@ -158,6 +160,21 @@ private fun EventDetail(
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             when (val payload = current.payload) {
                 is HttpPayload -> HttpDetail(current, payload, requestBody, responseBody)
+                is WebSocketPayload -> {
+                    Section("WebSocket")
+                    KeyValue("URL", payload.url, mono = true)
+                    KeyValue("Event", payload.kind.name)
+                    KeyValue("Connection", payload.connectionId, mono = true)
+                    KeyValue("Time", Presentation.time(current.timestamp))
+                    KeyValue("Source", current.source)
+                    payload.code?.let { KeyValue("Code", it.toString()) }
+                    payload.reason?.takeIf { it.isNotEmpty() }?.let { KeyValue("Reason", it) }
+                    payload.error?.let { KeyValue("Error", it) }
+                    requestBody?.let {
+                        Section("Message")
+                        Code(it)
+                    }
+                }
                 is MetaPayload -> {
                     Section("Event")
                     KeyValue("Kind", payload.kind.name)

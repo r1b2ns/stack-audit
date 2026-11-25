@@ -12,7 +12,7 @@ internal enum class Tone { Success, Redirect, ClientError, ServerError, Failed, 
 internal object Presentation {
     private val pretty = Json { prettyPrint = true }
 
-    val filters: List<Category?> = listOf(null, Category.Http, Category.Audit)
+    val filters: List<Category?> = listOf(null, Category.Http, Category.WebSocket, Category.Audit)
 
     fun filterLabel(category: Category?): String =
         when (category) {
@@ -29,8 +29,10 @@ internal object Presentation {
     fun tone(
         category: Category,
         status: Int?,
+        title: String = "",
     ): Tone =
         when {
+            category == Category.WebSocket -> if (title.startsWith("WS failed")) Tone.Failed else Tone.Redirect
             category != Category.Http -> Tone.Neutral
             status == null -> Tone.Failed
             status < 300 -> Tone.Success

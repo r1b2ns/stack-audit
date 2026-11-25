@@ -16,6 +16,8 @@ class PresentationTest {
         assertEquals(Tone.ServerError, Presentation.tone(Category.Http, 503))
         assertEquals(Tone.Failed, Presentation.tone(Category.Http, null))
         assertEquals(Tone.Neutral, Presentation.tone(Category.Audit, null))
+        assertEquals(Tone.Redirect, Presentation.tone(Category.WebSocket, null, "WS ↑ a.test/ws (3 B)"))
+        assertEquals(Tone.Failed, Presentation.tone(Category.WebSocket, null, "WS failed a.test/ws"))
     }
 
     @Test
@@ -47,6 +49,6 @@ class PresentationTest {
 
     @Test
     fun labelsFilters() {
-        assertEquals(listOf("All", "Network", "Log"), Presentation.filters.map(Presentation::filterLabel))
+        assertEquals(listOf("All", "Network", "WebSocket", "Log"), Presentation.filters.map(Presentation::filterLabel))
     }
 }
