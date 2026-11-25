@@ -230,4 +230,68 @@ class AuditEngineTest {
             engine.flush()
             assertEquals(1, engine.summaries(Category.Http, "orders", 100).first().size)
         }
+
+    private fun frame(
+        kind: WebSocketKind,
+        text: String? = null,
+        binary: ByteArray? = null,
+        timestamp: Long = clock,
+    ) = WebSocketFrame(
+        source = "test",
+        connectionId = "c1",
+        url = "wss://ws.test/chat?token=abcdefghijklmnop",
+        kind = kind,
+        timestamp = timestamp,
+        data = text?.encodeToByteArray() ?: binary,
+        isText = binary == null,
+        code = if (kind == WebSocketKind.Closed) 1000 else null,
+    )
+
+    @Test
+    fun recordsWebSocketFramesWithMasking() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordWebSocket(frame(WebSocketKind.Open))
+            engine.recordWebSocket(frame(WebSocketKind.Sent, text = """{"password":"hunter2","msg":"hi"}"""))
+            engine.recordWebSocket(frame(WebSocketKind.Received, binary = byteArrayOf(1, 2, 3)))
+            engine.recordWebSocket(frame(WebSocketKind.Closed))
+            engine.flush()
+            val rows = engine.summaries(Category.WebSocket, null, 100).first().reversed()
+            assertEquals(
+                listOf("WS open ws.test/chat", "WS ↑ ws.test/chat (33 B)", "WS ↓ ws.test/chat (3 B)", "WS closed ws.test/chat 1000"),
+                rows.map { it.title },
+            )
+            val sent = engine.event(rows[1].id)!!
+            assertEquals("c1", sent.traceId)
+            val payload = sent.payload as WebSocketPayload
+            assertEquals("wss://ws.test/chat?token=••••mnop", payload.url)
+            val body = engine.body(payload.body!!)!!.decodeToString()
+            assertTrue("\"password\":\"••••\"" in body)
+            assertTrue("hi" in body)
+            val binary = (engine.event(rows[2].id)!!.payload as WebSocketPayload).body!!
+            assertFalse(binary.text)
+            assertEquals(listOf<Byte>(1, 2, 3), engine.body(binary)!!.toList())
+        }
+
+    @Test
+    fun webSocketCategoryCanBeDisabled() =
+        runBlocking<Unit> {
+            val engine = engine { categories = setOf(Category.Http) }
+            engine.recordWebSocket(frame(WebSocketKind.Open))
+            engine.flush()
+            assertTrue(engine.summaries(Category.WebSocket, null, 100).first().isEmpty())
+        }
+
+    @Test
+    fun purgeKeepsBlobsStillReferenced() =
+        runBlocking<Unit> {
+            val engine = engine { retention = 7.days }
+            engine.recordWebSocket(frame(WebSocketKind.Sent, text = "same", timestamp = clock - 10.days.inWholeMilliseconds))
+            engine.recordWebSocket(frame(WebSocketKind.Sent, text = "same"))
+            engine.flush()
+            engine.purgeNow()
+            val remaining = engine.summaries(Category.WebSocket, null, 100).first().single()
+            val ref = (engine.event(remaining.id)!!.payload as WebSocketPayload).body!!
+            assertEquals("same", engine.body(ref)!!.decodeToString())
+        }
 }

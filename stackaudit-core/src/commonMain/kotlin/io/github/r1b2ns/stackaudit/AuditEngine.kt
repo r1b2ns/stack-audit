@@ -56,6 +56,11 @@ internal class AuditEngine(
         offer(Pending.Http(exchange))
     }
 
+    fun recordWebSocket(frame: WebSocketFrame) {
+        if (Category.WebSocket !in config.categories) return
+        offer(Pending.WebSocket(frame))
+    }
+
     fun recordMeta(
         kind: MetaKind,
         message: String,
@@ -142,17 +147,19 @@ internal class AuditEngine(
             events.joinToString("\n") { event ->
                 val payload = event.payload
                 val safe =
-                    if (scrubber != null && payload is HttpPayload) {
-                        event.copy(
-                            payload =
-                                payload.copy(
-                                    url = scrubber.url(payload.url),
-                                    requestHeaders = scrubber.headers(payload.requestHeaders),
-                                    responseHeaders = scrubber.headers(payload.responseHeaders),
-                                ),
-                        )
-                    } else {
-                        event
+                    when {
+                        scrubber == null -> event
+                        payload is HttpPayload ->
+                            event.copy(
+                                payload =
+                                    payload.copy(
+                                        url = scrubber.url(payload.url),
+                                        requestHeaders = scrubber.headers(payload.requestHeaders),
+                                        responseHeaders = scrubber.headers(payload.responseHeaders),
+                                    ),
+                            )
+                        payload is WebSocketPayload -> event.copy(payload = payload.copy(url = scrubber.url(payload.url)))
+                        else -> event
                     }
                 AuditJson.encodeToString(AuditEvent.serializer(), safe)
             }
@@ -180,6 +187,7 @@ internal class AuditEngine(
         if (lost > 0) safely { writeMeta(MetaPayload(MetaKind.Dropped, "$lost events dropped", lost), now()) }
         when (item) {
             is Pending.Http -> safely { writeHttp(item.exchange) }
+            is Pending.WebSocket -> safely { writeWebSocket(item.frame) }
             is Pending.Meta -> safely { writeMeta(item.payload, item.timestamp) }
             is Pending.Purge -> {
                 safely { purge() }
@@ -234,10 +242,7 @@ internal class AuditEngine(
                     title = title,
                     payload = payload,
                 )
-            listOfNotNull(request, response).forEach { stored ->
-                val data = stored.data ?: return@forEach
-                queries.insertBlob(stored.ref.hash!!, cipher.encrypt(data), data.size.toLong())
-            }
+            listOfNotNull(request, response).forEach { storeBlob(seq, it) }
             queries.insertHttp(
                 seq,
                 exchange.method,
@@ -247,6 +252,50 @@ internal class AuditEngine(
                 response?.ref?.hash?.takeIf { response.data != null },
             )
         }
+    }
+
+    private fun writeWebSocket(frame: WebSocketFrame) {
+        val scrub = config.secrets.masksOnWrite
+        val url = if (scrub) writeScrubber.url(frame.url) else frame.url
+        val stored = body(frame.data, if (frame.isText) null else BINARY, null, scrub)
+        val payload =
+            WebSocketPayload(
+                connectionId = frame.connectionId,
+                url = url,
+                kind = frame.kind,
+                body = stored?.ref,
+                code = frame.code,
+                reason = frame.reason,
+                error = frame.error,
+            )
+        val parts = UrlParts.parse(url)
+        val target = "${parts.host}${parts.path}"
+        val size = frame.data?.size ?: 0
+        val title =
+            when (frame.kind) {
+                WebSocketKind.Open -> "WS open $target"
+                WebSocketKind.Sent -> "WS ↑ $target ($size B)"
+                WebSocketKind.Received -> "WS ↓ $target ($size B)"
+                WebSocketKind.Ping -> "WS ping $target"
+                WebSocketKind.Pong -> "WS pong $target"
+                WebSocketKind.Closing -> "WS closing $target ${frame.code ?: ""}".trimEnd()
+                WebSocketKind.Closed -> "WS closed $target ${frame.code ?: ""}".trimEnd()
+                WebSocketKind.Failed -> "WS failed $target"
+            }
+        database.transaction {
+            val seq = insert(frame.timestamp, null, Category.WebSocket, frame.source, frame.connectionId, title, payload)
+            stored?.let { storeBlob(seq, it) }
+        }
+    }
+
+    private fun storeBlob(
+        seq: Long,
+        stored: StoredBody,
+    ) {
+        val data = stored.data ?: return
+        val hash = stored.ref.hash ?: return
+        queries.insertBlob(hash, cipher.encrypt(data), data.size.toLong())
+        queries.insertRef(seq, hash)
     }
 
     private fun writeMeta(
@@ -310,6 +359,7 @@ internal class AuditEngine(
     private fun deleteThrough(seq: Long) {
         database.transaction {
             queries.deleteHttpUpTo(seq)
+            queries.deleteRefsUpTo(seq)
             queries.deleteUpTo(seq)
             queries.deleteOrphanBlobs()
         }
@@ -321,6 +371,7 @@ internal class AuditEngine(
         val count = queries.countEvents().executeAsOne()
         database.transaction {
             queries.deleteAllHttp()
+            queries.deleteAllRefs()
             queries.deleteAllEvents()
             queries.deleteAllBlobs()
         }
@@ -349,6 +400,8 @@ internal class AuditEngine(
     private sealed interface Pending {
         class Http(val exchange: HttpExchange) : Pending
 
+        class WebSocket(val frame: WebSocketFrame) : Pending
+
         class Meta(val payload: MetaPayload, val timestamp: Long) : Pending
 
         class Purge(val done: CompletableDeferred<Unit>?) : Pending
@@ -360,6 +413,7 @@ internal class AuditEngine(
 
     private companion object {
         const val MAX_PURGE_ROUNDS = 20
+        const val BINARY = "application/octet-stream"
     }
 }
 

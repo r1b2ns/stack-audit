@@ -65,6 +65,45 @@ public data class HttpPayload(
 ) : AuditPayload
 
 @Serializable
+public enum class WebSocketKind {
+    @SerialName("open")
+    Open,
+
+    @SerialName("sent")
+    Sent,
+
+    @SerialName("received")
+    Received,
+
+    @SerialName("ping")
+    Ping,
+
+    @SerialName("pong")
+    Pong,
+
+    @SerialName("closing")
+    Closing,
+
+    @SerialName("closed")
+    Closed,
+
+    @SerialName("failed")
+    Failed,
+}
+
+@Serializable
+@SerialName("websocket")
+public data class WebSocketPayload(
+    val connectionId: String,
+    val url: String,
+    val kind: WebSocketKind,
+    val body: BodyRef? = null,
+    val code: Int? = null,
+    val reason: String? = null,
+    val error: String? = null,
+) : AuditPayload
+
+@Serializable
 public enum class MetaKind {
     @SerialName("started")
     Started,
@@ -153,6 +192,26 @@ public interface HttpRecorder {
     public val maxBodySize: Long
 
     public fun record(exchange: HttpExchange)
+}
+
+public class WebSocketFrame(
+    public val source: String,
+    public val connectionId: String,
+    public val url: String,
+    public val kind: WebSocketKind,
+    public val timestamp: Long,
+    public val data: ByteArray? = null,
+    public val isText: Boolean = true,
+    public val code: Int? = null,
+    public val reason: String? = null,
+    public val error: String? = null,
+)
+
+public interface WebSocketRecorder {
+    public val isCapturingWebSockets: Boolean
+    public val maxBodySize: Long
+
+    public fun record(frame: WebSocketFrame)
 }
 
 public fun interface AuditViewer {

@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 
-public object StackAudit : HttpRecorder {
+public object StackAudit :
+    HttpRecorder,
+    WebSocketRecorder {
     private val engine = MutableStateFlow<AuditEngine?>(null)
     private var viewer: AuditViewer? = null
 
@@ -20,6 +22,8 @@ public object StackAudit : HttpRecorder {
     public val config: StackAuditConfig? get() = engine.value?.config
 
     override val isCapturing: Boolean get() = engine.value?.config?.categories?.contains(Category.Http) == true
+
+    override val isCapturingWebSockets: Boolean get() = engine.value?.config?.categories?.contains(Category.WebSocket) == true
 
     override val maxBodySize: Long get() = engine.value?.config?.maxBodySize ?: 0
 
@@ -89,6 +93,10 @@ public object StackAudit : HttpRecorder {
 
     override fun record(exchange: HttpExchange) {
         engine.value?.recordHttp(exchange)
+    }
+
+    override fun record(frame: WebSocketFrame) {
+        engine.value?.recordWebSocket(frame)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

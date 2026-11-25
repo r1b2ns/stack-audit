@@ -25,6 +25,14 @@ CREATE TABLE audit_http (
     response_hash TEXT
 );
 
+CREATE TABLE audit_ref (
+    event_seq INTEGER NOT NULL,
+    hash TEXT NOT NULL
+);
+
+CREATE INDEX audit_ref_hash ON audit_ref(hash);
+CREATE INDEX audit_ref_seq ON audit_ref(event_seq);
+
 CREATE TABLE audit_blob (
     hash TEXT NOT NULL PRIMARY KEY,
     data BLOB NOT NULL,
@@ -40,6 +48,15 @@ SELECT last_insert_rowid();
 
 insertHttp:
 INSERT INTO audit_http(event_seq, method, host, status, request_hash, response_hash) VALUES (?, ?, ?, ?, ?, ?);
+
+insertRef:
+INSERT INTO audit_ref(event_seq, hash) VALUES (?, ?);
+
+deleteRefsUpTo:
+DELETE FROM audit_ref WHERE event_seq <= ?;
+
+deleteAllRefs:
+DELETE FROM audit_ref;
 
 insertBlob:
 INSERT OR IGNORE INTO audit_blob(hash, data, size) VALUES (?, ?, ?);
@@ -83,11 +100,7 @@ deleteHttpUpTo:
 DELETE FROM audit_http WHERE event_seq <= ?;
 
 deleteOrphanBlobs:
-DELETE FROM audit_blob WHERE hash NOT IN (
-    SELECT request_hash FROM audit_http WHERE request_hash IS NOT NULL
-    UNION
-    SELECT response_hash FROM audit_http WHERE response_hash IS NOT NULL
-);
+DELETE FROM audit_blob WHERE hash NOT IN (SELECT hash FROM audit_ref);
 
 eventBytes:
 SELECT COALESCE(SUM(size), 0) FROM audit_event;

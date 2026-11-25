@@ -3,12 +3,16 @@ package io.github.r1b2ns.stackaudit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
-public object StackAudit : HttpRecorder {
+public object StackAudit :
+    HttpRecorder,
+    WebSocketRecorder {
     public val isStarted: Boolean get() = false
 
     public val config: StackAuditConfig? get() = null
 
     override val isCapturing: Boolean get() = false
+
+    override val isCapturingWebSockets: Boolean get() = false
 
     override val maxBodySize: Long get() = 0
 
@@ -29,6 +33,8 @@ public object StackAudit : HttpRecorder {
     public fun show(): Boolean = false
 
     override fun record(exchange: HttpExchange) {}
+
+    override fun record(frame: WebSocketFrame) {}
 
     public fun events(
         category: Category? = null,

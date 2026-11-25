@@ -1,0 +1,13 @@
+CREATE TABLE audit_ref (
+    event_seq INTEGER NOT NULL,
+    hash TEXT NOT NULL
+);
+
+CREATE INDEX audit_ref_hash ON audit_ref(hash);
+CREATE INDEX audit_ref_seq ON audit_ref(event_seq);
+
+INSERT INTO audit_ref(event_seq, hash)
+SELECT event_seq, request_hash FROM audit_http WHERE request_hash IS NOT NULL;
+
+INSERT INTO audit_ref(event_seq, hash)
+SELECT event_seq, response_hash FROM audit_http WHERE response_hash IS NOT NULL;
