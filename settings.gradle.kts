@@ -23,6 +23,7 @@ include(
     ":stackaudit-ui",
     ":stackaudit-apple",
     ":stackaudit-noop",
+    ":stackaudit-ktor-noop",
 )
 
 include(":sample-android")
