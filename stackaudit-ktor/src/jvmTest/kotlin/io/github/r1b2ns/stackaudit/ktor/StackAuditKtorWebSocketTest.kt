@@ -15,6 +15,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.AfterTest
@@ -64,7 +65,10 @@ class StackAuditKtorWebSocketTest {
                 send(Frame.Text("hello"))
                 reply = (incoming.receive() as Frame.Text).readText()
                 close(CloseReason(CloseReason.Codes.NORMAL, "bye"))
-                for (frame in incoming) Unit
+                try {
+                    for (frame in incoming) Unit
+                } catch (_: CancellationException) {
+                }
             }
             client.close()
             assertEquals("echo:hello", reply)
