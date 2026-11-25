@@ -1,0 +1,26 @@
+name: stackaudit
+description: Audit and inspect HTTP traffic, storage, analytics and feature flags in Flutter apps, backed by the StackAudit native libraries.
+version: 0.1.0
+repository: https://github.com/r1b2ns/stack-audit
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: io.github.r1b2ns.stackaudit.flutter
+        pluginClass: StackAuditPlugin
+      ios:
+        pluginClass: StackAuditPlugin
