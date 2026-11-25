@@ -30,12 +30,13 @@ jobs:
           :stackaudit-ui:testAndroidHostTest
           :stackaudit-android:testAndroidHostTest
           :stackaudit-cli:test
+          compileCommonMainKotlinMetadata
           :sample-android:testDebugUnitTest
           :sample-android:assembleDebug
           --continue
       - name: Gradle plugin tests
         working-directory: stackaudit-gradle-plugin
-        run: ../gradlew test
+        run: ../gradlew validatePlugins test
 
   flutter:
     runs-on: ubuntu-latest
