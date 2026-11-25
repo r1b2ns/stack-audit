@@ -48,7 +48,22 @@ class PresentationTest {
     }
 
     @Test
+    fun parsesOverridesByType() {
+        assertEquals(io.github.r1b2ns.stackaudit.FlagValue.Bool(true), Presentation.parseOverride(io.github.r1b2ns.stackaudit.FlagValue.Bool(false), " TRUE "))
+        assertEquals(null, Presentation.parseOverride(io.github.r1b2ns.stackaudit.FlagValue.Bool(false), "yes"))
+        assertEquals(io.github.r1b2ns.stackaudit.FlagValue.Number(2.5), Presentation.parseOverride(io.github.r1b2ns.stackaudit.FlagValue.Number(1.0), "2.5"))
+        assertEquals(null, Presentation.parseOverride(io.github.r1b2ns.stackaudit.FlagValue.Number(1.0), "abc"))
+        assertEquals(io.github.r1b2ns.stackaudit.FlagValue.Text("x"), Presentation.parseOverride(io.github.r1b2ns.stackaudit.FlagValue.Text(""), "x"))
+    }
+
+    @Test
+    fun analyticsToneReflectsValidation() {
+        assertEquals(Tone.ClientError, Presentation.tone(Category.Analytics, null, "firebase: x (invalid)"))
+        assertEquals(Tone.Success, Presentation.tone(Category.Analytics, null, "firebase: x"))
+    }
+
+    @Test
     fun labelsFilters() {
-        assertEquals(listOf("All", "Network", "WebSocket", "Storage", "Database", "Log"), Presentation.filters.map(Presentation::filterLabel))
+        assertEquals(listOf("All", "Network", "WebSocket", "Storage", "Database", "Analytics", "Flags", "Log"), Presentation.filters.map(Presentation::filterLabel))
     }
 }

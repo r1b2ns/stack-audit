@@ -53,7 +53,11 @@ import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpPayload
 import io.github.r1b2ns.stackaudit.MetaPayload
 import io.github.r1b2ns.stackaudit.StackAudit
+import io.github.r1b2ns.stackaudit.AnalyticsPayload
 import io.github.r1b2ns.stackaudit.DatabasePayload
+import io.github.r1b2ns.stackaudit.FlagPayload
+import io.github.r1b2ns.stackaudit.FlagState
+import io.github.r1b2ns.stackaudit.FlagValue
 import io.github.r1b2ns.stackaudit.StoragePayload
 import io.github.r1b2ns.stackaudit.WebSocketPayload
 import kotlinx.coroutines.launch
@@ -63,12 +67,13 @@ public fun StackAuditScreen(onClose: () -> Unit) {
     val colors = if (isSystemInDarkTheme()) Palette.Dark else Palette.Light
     CompositionLocalProvider(LocalPalette provides colors) {
         var selected by remember { mutableStateOf<String?>(null) }
+        var showFlags by remember { mutableStateOf(false) }
         Box(Modifier.fillMaxSize().background(colors.background).windowInsetsPadding(WindowInsets.safeDrawing)) {
             val id = selected
-            if (id == null) {
-                EventList(onOpen = { selected = it }, onClose = onClose)
-            } else {
-                EventDetail(id = id, onBack = { selected = null })
+            when {
+                showFlags -> FlagsScreen(onBack = { showFlags = false })
+                id == null -> EventList(onOpen = { selected = it }, onFlags = { showFlags = true }, onClose = onClose)
+                else -> EventDetail(id = id, onBack = { selected = null })
             }
         }
     }
@@ -77,6 +82,7 @@ public fun StackAuditScreen(onClose: () -> Unit) {
 @Composable
 private fun EventList(
     onOpen: (String) -> Unit,
+    onFlags: () -> Unit,
     onClose: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -85,6 +91,7 @@ private fun EventList(
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         TopBar(title = "StackAudit") {
+            Action("Flags", onFlags)
             Action("Export") { scope.launch { shareFile("stackaudit.har", "application/json", StackAudit.exportHar()) } }
             Action("Clear") { scope.launch { StackAudit.clear() } }
             Action("Close", onClose)
@@ -209,6 +216,32 @@ private fun EventDetail(
                         payload.arguments.forEachIndexed { index, value -> KeyValue("#${index + 1}", value ?: "NULL", mono = true) }
                     }
                 }
+                is AnalyticsPayload -> {
+                    Section("Analytics")
+                    KeyValue("Provider", payload.provider)
+                    KeyValue("Event", payload.name, mono = true)
+                    KeyValue("Validation", payload.validation.name)
+                    KeyValue("Time", Presentation.time(current.timestamp))
+                    if (payload.issues.isNotEmpty()) {
+                        Section("Issues")
+                        payload.issues.forEach { Label("• $it", color = palette.clientError) }
+                    }
+                    Section("Parameters")
+                    if (payload.params.isEmpty()) Label("None", color = palette.muted)
+                    payload.params.forEach { (key, value) -> KeyValue(key, value ?: "null", mono = true) }
+                }
+                is FlagPayload -> {
+                    Section("Feature flag")
+                    KeyValue("Key", payload.key, mono = true)
+                    KeyValue("Provider", payload.provider)
+                    KeyValue("Effective", payload.effective.display)
+                    KeyValue("Source", payload.source.name)
+                    KeyValue("Default", payload.defaultValue.display)
+                    KeyValue("Remote", payload.remoteValue?.display ?: "-")
+                    KeyValue("Override", payload.overrideValue?.display ?: "-")
+                    payload.changedBy?.let { KeyValue("Changed by", it) }
+                    KeyValue("Time", Presentation.time(current.timestamp))
+                }
                 is MetaPayload -> {
                     Section("Event")
                     KeyValue("Kind", payload.kind.name)
@@ -221,6 +254,52 @@ private fun EventDetail(
             KeyValue("Previous", current.prevHash ?: "-", mono = true)
         }
     }
+}
+
+@Composable
+private fun FlagsScreen(onBack: () -> Unit) {
+    val states by StackAudit.flags.states.collectAsState()
+    Column(Modifier.fillMaxSize()) {
+        TopBar(title = "Feature flags", leading = { Action("Back", onBack) }) {
+            Action("Reset all") { StackAudit.flags.clearOverrides() }
+        }
+        if (states.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Label("No flag read yet", color = palette.muted)
+            }
+            return@Column
+        }
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(states.values.sortedBy { it.key }, key = { it.key }) { FlagRow(it) }
+        }
+    }
+}
+
+@Composable
+private fun FlagRow(state: FlagState) {
+    Column(Modifier.fillMaxWidth().background(palette.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Label(state.key, weight = FontWeight.Medium, mono = true)
+        Label("${state.effective.display} · ${state.source.name.lowercase()} · ${state.provider}", color = palette.muted, size = 12)
+        Spacer(Modifier.height(8.dp))
+        when (val current = state.defaultValue) {
+            is FlagValue.Bool ->
+                Row {
+                    val effective = (state.effective as? FlagValue.Bool)?.value
+                    Chip("On", selected = state.overrideValue != null && effective == true) { StackAudit.flags.override(state.key, FlagValue.Bool(true)) }
+                    Chip("Off", selected = state.overrideValue != null && effective == false) { StackAudit.flags.override(state.key, FlagValue.Bool(false)) }
+                    Chip("Reset", selected = state.overrideValue == null) { StackAudit.flags.clearOverride(state.key) }
+                }
+            else -> {
+                var text by remember(state.key, state.effective) { mutableStateOf(state.effective.display) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { SearchField(text) { text = it } }
+                    Action("Set") { Presentation.parseOverride(current, text)?.let { StackAudit.flags.override(state.key, it) } }
+                    Action("Reset") { StackAudit.flags.clearOverride(state.key) }
+                }
+            }
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.divider))
 }
 
 @Composable

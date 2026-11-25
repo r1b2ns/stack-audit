@@ -2,6 +2,7 @@ package io.github.r1b2ns.stackaudit.ui
 
 import io.github.r1b2ns.stackaudit.BodyRef
 import io.github.r1b2ns.stackaudit.Category
+import io.github.r1b2ns.stackaudit.FlagValue
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
@@ -12,7 +13,7 @@ internal enum class Tone { Success, Redirect, ClientError, ServerError, Failed, 
 internal object Presentation {
     private val pretty = Json { prettyPrint = true }
 
-    val filters: List<Category?> = listOf(null, Category.Http, Category.WebSocket, Category.Storage, Category.Database, Category.Audit)
+    val filters: List<Category?> = listOf(null, Category.Http, Category.WebSocket, Category.Storage, Category.Database, Category.Analytics, Category.Flag, Category.Audit)
 
     fun filterLabel(category: Category?): String =
         when (category) {
@@ -32,6 +33,7 @@ internal object Presentation {
         title: String = "",
     ): Tone =
         when {
+            category == Category.Analytics -> if (title.endsWith("(invalid)") || title.endsWith("(not in plan)")) Tone.ClientError else Tone.Success
             category == Category.WebSocket -> if (title.startsWith("WS failed")) Tone.Failed else Tone.Redirect
             category != Category.Http -> Tone.Neutral
             status == null -> Tone.Failed
@@ -61,6 +63,16 @@ internal object Presentation {
             bytes < 1024 -> "$bytes B"
             bytes < 1024 * 1024 -> "${bytes / 1024}.${bytes % 1024 * 10 / 1024} KB"
             else -> "${bytes / (1024 * 1024)}.${bytes % (1024 * 1024) * 10 / (1024 * 1024)} MB"
+        }
+
+    fun parseOverride(
+        current: FlagValue,
+        text: String,
+    ): FlagValue? =
+        when (current) {
+            is FlagValue.Bool -> text.trim().lowercase().toBooleanStrictOrNull()?.let { FlagValue.Bool(it) }
+            is FlagValue.Number -> text.trim().toDoubleOrNull()?.let { FlagValue.Number(it) }
+            is FlagValue.Text -> FlagValue.Text(text)
         }
 
     fun body(
