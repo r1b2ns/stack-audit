@@ -140,6 +140,85 @@ public data class DatabasePayload(
 ) : AuditPayload
 
 @Serializable
+public enum class ValidationStatus {
+    @SerialName("valid")
+    Valid,
+
+    @SerialName("unknown_event")
+    UnknownEvent,
+
+    @SerialName("invalid")
+    Invalid,
+
+    @SerialName("not_checked")
+    NotChecked,
+}
+
+@Serializable
+@SerialName("analytics")
+public data class AnalyticsPayload(
+    val provider: String,
+    val name: String,
+    val params: Map<String, String?> = emptyMap(),
+    val validation: ValidationStatus = ValidationStatus.NotChecked,
+    val issues: List<String> = emptyList(),
+) : AuditPayload
+
+@Serializable
+public sealed interface FlagValue {
+    public val display: String
+
+    @Serializable
+    @SerialName("bool")
+    public data class Bool(
+        val value: Boolean,
+    ) : FlagValue {
+        override val display: String get() = value.toString()
+    }
+
+    @Serializable
+    @SerialName("text")
+    public data class Text(
+        val value: String,
+    ) : FlagValue {
+        override val display: String get() = value
+    }
+
+    @Serializable
+    @SerialName("number")
+    public data class Number(
+        val value: Double,
+    ) : FlagValue {
+        override val display: String get() = if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+    }
+}
+
+@Serializable
+public enum class FlagSource {
+    @SerialName("default")
+    Default,
+
+    @SerialName("remote")
+    Remote,
+
+    @SerialName("override")
+    Override,
+}
+
+@Serializable
+@SerialName("flag")
+public data class FlagPayload(
+    val key: String,
+    val provider: String,
+    val defaultValue: FlagValue,
+    val remoteValue: FlagValue? = null,
+    val overrideValue: FlagValue? = null,
+    val effective: FlagValue,
+    val source: FlagSource,
+    val changedBy: String? = null,
+) : AuditPayload
+
+@Serializable
 public enum class MetaKind {
     @SerialName("started")
     Started,
@@ -282,6 +361,30 @@ public interface DatabaseRecorder {
     public val isCapturingDatabase: Boolean
 
     public fun record(statement: DatabaseStatement)
+}
+
+public class AnalyticsCall(
+    public val provider: String,
+    public val name: String,
+    public val params: Map<String, Any?>,
+    public val timestamp: Long,
+    public val validation: ValidationStatus = ValidationStatus.NotChecked,
+    public val issues: List<String> = emptyList(),
+)
+
+public interface AnalyticsRecorder {
+    public val isCapturingAnalytics: Boolean
+
+    public fun record(call: AnalyticsCall)
+}
+
+public interface FlagRecorder {
+    public val isCapturingFlags: Boolean
+
+    public fun record(
+        flag: FlagPayload,
+        timestamp: Long,
+    )
 }
 
 public fun interface AuditViewer {

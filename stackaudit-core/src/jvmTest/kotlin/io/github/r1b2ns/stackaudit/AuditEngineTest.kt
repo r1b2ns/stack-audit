@@ -338,4 +338,32 @@ class AuditEngineTest {
             val row = engine.summaries(Category.Storage, null, 10).first().single()
             assertEquals("abc", (engine.event(row.id)!!.payload as StoragePayload).newValue)
         }
+
+    @Test
+    fun recordsAnalyticsAndFlags() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordAnalytics(
+                AnalyticsCall("firebase", "login", mapOf("method" to "email", "password" to "hunter2"), clock, ValidationStatus.UnknownEvent, listOf("x")),
+            )
+            engine.recordFlag(
+                FlagPayload("checkout", "remote", FlagValue.Bool(false), FlagValue.Bool(true), null, FlagValue.Bool(true), FlagSource.Remote),
+                clock,
+            )
+            engine.flush()
+            val analytics = engine.summaries(Category.Analytics, null, 10).first().single()
+            assertEquals("firebase: login (not in plan)", analytics.title)
+            val payload = engine.event(analytics.id)!!.payload as AnalyticsPayload
+            assertEquals(mapOf("method" to "email", "password" to "••••"), payload.params)
+            assertEquals("flag checkout = true (remote)", engine.summaries(Category.Flag, null, 10).first().single().title)
+        }
+
+    @Test
+    fun overrideStorePersistsInTheDatabase() {
+        val engine = engine()
+        engine.overrideStore.save("a", FlagValue.Number(2.5))
+        engine.overrideStore.save("b", FlagValue.Text("x"))
+        engine.overrideStore.save("b", null)
+        assertEquals(mapOf<String, FlagValue>("a" to FlagValue.Number(2.5)), engine.overrideStore.load())
+    }
 }

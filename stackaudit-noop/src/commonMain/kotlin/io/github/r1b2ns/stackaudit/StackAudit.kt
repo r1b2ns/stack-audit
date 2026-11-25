@@ -7,8 +7,18 @@ public object StackAudit :
     HttpRecorder,
     WebSocketRecorder,
     StorageRecorder,
-    DatabaseRecorder {
+    DatabaseRecorder,
+    AnalyticsRecorder,
+    FlagRecorder {
     public val isStarted: Boolean get() = false
+
+    public val analytics: StackAuditAnalytics = StackAuditAnalytics()
+
+    public val flags: StackAuditFlags = StackAuditFlags()
+
+    override val isCapturingAnalytics: Boolean get() = false
+
+    override val isCapturingFlags: Boolean get() = false
 
     public val config: StackAuditConfig? get() = null
 
@@ -45,6 +55,13 @@ public object StackAudit :
     override fun record(change: StorageChange) {}
 
     override fun record(statement: DatabaseStatement) {}
+
+    override fun record(call: AnalyticsCall) {}
+
+    override fun record(
+        flag: FlagPayload,
+        timestamp: Long,
+    ) {}
 
     public fun events(
         category: Category? = null,

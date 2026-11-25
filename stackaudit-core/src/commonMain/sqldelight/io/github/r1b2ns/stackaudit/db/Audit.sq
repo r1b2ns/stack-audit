@@ -39,6 +39,11 @@ CREATE TABLE audit_blob (
     size INTEGER NOT NULL
 );
 
+CREATE TABLE audit_flag_override (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 insertEvent:
 INSERT INTO audit_event(id, timestamp, duration, category, source, trace_id, title, payload, size, prev_hash, hash)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -116,3 +121,12 @@ DELETE FROM audit_http;
 
 deleteAllBlobs:
 DELETE FROM audit_blob;
+
+flagOverrides:
+SELECT key, value FROM audit_flag_override;
+
+saveFlagOverride:
+INSERT OR REPLACE INTO audit_flag_override(key, value) VALUES (?, ?);
+
+deleteFlagOverride:
+DELETE FROM audit_flag_override WHERE key = ?;

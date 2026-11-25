@@ -24,6 +24,17 @@ class NoopTest {
         }
 
     @Test
+    fun flagsReturnRemoteOrDefaultAndAnalyticsForwards() {
+        val flags = StackAudit.flags.wrap({ key -> if (key == "on") FlagValue.Bool(true) else null })
+        StackAudit.flags.override("off", FlagValue.Bool(true))
+        assertTrue(flags.bool("on", false))
+        assertFalse(flags.bool("off", false))
+        var tracked = ""
+        StackAudit.analytics.wrap({ name, _ -> tracked = name }, "firebase").track("purchase", emptyMap())
+        assertTrue(tracked == "purchase")
+    }
+
+    @Test
     fun stillValidatesConfiguration() {
         assertFailsWith<IllegalArgumentException> { StackAudit.start { secrets = Secrets.ShowAfterHandshake() } }
     }

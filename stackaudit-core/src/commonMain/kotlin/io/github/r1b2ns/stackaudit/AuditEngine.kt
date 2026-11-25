@@ -71,6 +71,38 @@ internal class AuditEngine(
         offer(Pending.Database(statement))
     }
 
+    fun recordAnalytics(call: AnalyticsCall) {
+        if (Category.Analytics !in config.categories) return
+        offer(Pending.Analytics(call))
+    }
+
+    fun recordFlag(
+        flag: FlagPayload,
+        timestamp: Long,
+    ) {
+        if (Category.Flag !in config.categories) return
+        offer(Pending.Flag(flag, timestamp))
+    }
+
+    val overrideStore: OverrideStore =
+        object : OverrideStore {
+            override fun load(): Map<String, FlagValue> =
+                queries.flagOverrides().executeAsList().mapNotNull { row ->
+                    runCatching { row.key to AuditJson.decodeFromString(FlagValue.serializer(), row.value_) }.getOrNull()
+                }.toMap()
+
+            override fun save(
+                key: String,
+                value: FlagValue?,
+            ) {
+                if (value == null) {
+                    queries.deleteFlagOverride(key)
+                } else {
+                    queries.saveFlagOverride(key, AuditJson.encodeToString(FlagValue.serializer(), value))
+                }
+            }
+        }
+
     fun recordMeta(
         kind: MetaKind,
         message: String,
@@ -199,6 +231,8 @@ internal class AuditEngine(
             is Pending.Http -> safely { writeHttp(item.exchange) }
             is Pending.WebSocket -> safely { writeWebSocket(item.frame) }
             is Pending.Storage -> safely { writeStorage(item.change) }
+            is Pending.Analytics -> safely { writeAnalytics(item.call) }
+            is Pending.Flag -> safely { writeFlag(item.flag, item.timestamp) }
             is Pending.Database -> safely { writeDatabase(item.statement) }
             is Pending.Meta -> safely { writeMeta(item.payload, item.timestamp) }
             is Pending.Purge -> {
@@ -342,6 +376,35 @@ internal class AuditEngine(
         }
     }
 
+    private fun writeAnalytics(call: AnalyticsCall) {
+        val scrub = config.secrets.masksOnWrite
+        val params =
+            call.params.mapValues { (key, value) ->
+                val text = value?.let(::describe)
+                limit(if (scrub) writeScrubber.storageValue(key, text) else text)
+            }
+        val payload = AnalyticsPayload(call.provider, call.name, params, call.validation, call.issues)
+        val marker =
+            when (call.validation) {
+                ValidationStatus.Invalid -> " (invalid)"
+                ValidationStatus.UnknownEvent -> " (not in plan)"
+                else -> ""
+            }
+        database.transaction {
+            insert(call.timestamp, null, Category.Analytics, call.provider, null, "${call.provider}: ${call.name}$marker", payload)
+        }
+    }
+
+    private fun writeFlag(
+        flag: FlagPayload,
+        timestamp: Long,
+    ) {
+        val title = "flag ${flag.key} = ${flag.effective.display} (${flag.source.name.lowercase()})"
+        database.transaction {
+            insert(timestamp, null, Category.Flag, flag.provider, null, title, flag)
+        }
+    }
+
     private fun describe(value: Any): String =
         when (value) {
             is ByteArray -> "<${value.size} bytes>"
@@ -469,6 +532,10 @@ internal class AuditEngine(
         class WebSocket(val frame: WebSocketFrame) : Pending
 
         class Storage(val change: StorageChange) : Pending
+
+        class Analytics(val call: AnalyticsCall) : Pending
+
+        class Flag(val flag: FlagPayload, val timestamp: Long) : Pending
 
         class Database(val statement: DatabaseStatement) : Pending
 

@@ -15,11 +15,23 @@ public object StackAudit :
     HttpRecorder,
     WebSocketRecorder,
     StorageRecorder,
-    DatabaseRecorder {
+    DatabaseRecorder,
+    AnalyticsRecorder,
+    FlagRecorder {
     private val engine = MutableStateFlow<AuditEngine?>(null)
     private var viewer: AuditViewer? = null
 
     public val isStarted: Boolean get() = engine.value != null
+
+    private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() }
+
+    public val analytics: StackAuditAnalytics = StackAuditAnalytics({ this.takeIf { isStarted } }, clock)
+
+    public val flags: StackAuditFlags = StackAuditFlags({ this.takeIf { isStarted } }, clock)
+
+    override val isCapturingAnalytics: Boolean get() = engine.value?.config?.categories?.contains(Category.Analytics) == true
+
+    override val isCapturingFlags: Boolean get() = engine.value?.config?.categories?.contains(Category.Flag) == true
 
     public val config: StackAuditConfig? get() = engine.value?.config
 
@@ -57,12 +69,16 @@ public object StackAudit :
         if (config.secrets is Secrets.Show && !isDebuggableBuild()) {
             platformLog("StackAudit: Secrets.Show is active in a release build. Secrets are stored in clear text.")
         }
+        flags.attach(created.overrideStore)
         created.recordMeta(MetaKind.Started, "StackAudit started")
     }
 
     public suspend fun stop() {
         val current = engine.value ?: return
-        if (engine.compareAndSet(current, null)) current.shutdown()
+        if (engine.compareAndSet(current, null)) {
+            flags.attach(null)
+            current.shutdown()
+        }
     }
 
     public fun registerViewer(viewer: AuditViewer) {
@@ -111,6 +127,17 @@ public object StackAudit :
 
     override fun record(statement: DatabaseStatement) {
         engine.value?.recordDatabase(statement)
+    }
+
+    override fun record(call: AnalyticsCall) {
+        engine.value?.recordAnalytics(call)
+    }
+
+    override fun record(
+        flag: FlagPayload,
+        timestamp: Long,
+    ) {
+        engine.value?.recordFlag(flag, timestamp)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
