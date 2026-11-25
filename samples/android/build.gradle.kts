@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
+    id("io.github.r1b2ns.stackaudit")
 }
 
 android {

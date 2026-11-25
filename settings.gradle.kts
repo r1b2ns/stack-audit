@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("stackaudit-gradle-plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()

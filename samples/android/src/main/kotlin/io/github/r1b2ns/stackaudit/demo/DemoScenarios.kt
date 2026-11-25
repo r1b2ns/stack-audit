@@ -1,7 +1,6 @@
 package io.github.r1b2ns.stackaudit.demo
 
 import io.github.r1b2ns.stackaudit.ktor.StackAuditKtor
-import io.github.r1b2ns.stackaudit.okhttp.audited
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
@@ -103,7 +102,7 @@ const val MESSAGE = """{"type":"chat","text":"hello","password":"hunter2"}"""
 class DemoRunner(
     private val context: Context,
 ) {
-    private val okHttp = OkHttpClient.Builder().audited().build()
+    private val okHttp = OkHttpClient.Builder().build()
     private val analytics =
         StackAudit.analytics.wrap(AnalyticsTracker { name, params -> android.util.Log.d("DemoAnalytics", "$name $params") }, "demo")
     private val flags =
