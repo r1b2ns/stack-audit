@@ -49,6 +49,6 @@ class PresentationTest {
 
     @Test
     fun labelsFilters() {
-        assertEquals(listOf("All", "Network", "WebSocket", "Log"), Presentation.filters.map(Presentation::filterLabel))
+        assertEquals(listOf("All", "Network", "WebSocket", "Storage", "Database", "Log"), Presentation.filters.map(Presentation::filterLabel))
     }
 }

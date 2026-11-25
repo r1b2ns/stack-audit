@@ -53,6 +53,8 @@ import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpPayload
 import io.github.r1b2ns.stackaudit.MetaPayload
 import io.github.r1b2ns.stackaudit.StackAudit
+import io.github.r1b2ns.stackaudit.DatabasePayload
+import io.github.r1b2ns.stackaudit.StoragePayload
 import io.github.r1b2ns.stackaudit.WebSocketPayload
 import kotlinx.coroutines.launch
 
@@ -173,6 +175,38 @@ private fun EventDetail(
                     requestBody?.let {
                         Section("Message")
                         Code(it)
+                    }
+                }
+                is StoragePayload -> {
+                    Section("Storage")
+                    KeyValue("Store", payload.store)
+                    KeyValue("Operation", payload.operation.name)
+                    payload.key?.let { KeyValue("Key", it, mono = true) }
+                    payload.valueType?.let { KeyValue("Type", it) }
+                    KeyValue("Time", Presentation.time(current.timestamp))
+                    KeyValue("Source", current.source)
+                    payload.oldValue?.let {
+                        Section("Old value")
+                        Code(it)
+                    }
+                    payload.newValue?.let {
+                        Section("New value")
+                        Code(it)
+                    }
+                }
+                is DatabasePayload -> {
+                    Section("Database")
+                    KeyValue("Database", payload.database)
+                    KeyValue("Duration", Presentation.duration(current.durationMs))
+                    KeyValue("Time", Presentation.time(current.timestamp))
+                    KeyValue("Source", current.source)
+                    payload.rowsAffected?.let { KeyValue("Rows affected", it.toString()) }
+                    payload.error?.let { KeyValue("Error", it) }
+                    Section("SQL")
+                    Code(payload.sql)
+                    if (payload.arguments.isNotEmpty()) {
+                        Section("Arguments")
+                        payload.arguments.forEachIndexed { index, value -> KeyValue("#${index + 1}", value ?: "NULL", mono = true) }
                     }
                 }
                 is MetaPayload -> {

@@ -12,7 +12,7 @@ internal enum class Tone { Success, Redirect, ClientError, ServerError, Failed, 
 internal object Presentation {
     private val pretty = Json { prettyPrint = true }
 
-    val filters: List<Category?> = listOf(null, Category.Http, Category.WebSocket, Category.Audit)
+    val filters: List<Category?> = listOf(null, Category.Http, Category.WebSocket, Category.Storage, Category.Database, Category.Audit)
 
     fun filterLabel(category: Category?): String =
         when (category) {
