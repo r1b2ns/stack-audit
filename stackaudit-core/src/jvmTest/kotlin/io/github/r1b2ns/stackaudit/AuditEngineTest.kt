@@ -1,0 +1,233 @@
+package io.github.r1b2ns.stackaudit
+
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import io.github.r1b2ns.stackaudit.db.StackAuditDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.util.Properties
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import kotlin.coroutines.CoroutineContext
+import kotlin.test.AfterTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
+
+class AuditEngineTest {
+    private var clock = 1_700_000_000_000L
+    private val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties(), StackAuditDatabase.Schema)
+    private val engines = mutableListOf<AuditEngine>()
+
+    @AfterTest
+    fun tearDown() =
+        runBlocking<Unit> {
+            engines.forEach { it.shutdown() }
+            driver.close()
+        }
+
+    private fun engine(
+        context: CoroutineContext = Dispatchers.IO,
+        configure: StackAuditConfig.Builder.() -> Unit = {},
+    ): AuditEngine = AuditEngine(StackAuditConfig.build(configure), driver, PlainCipher, context, { clock }).also { engines += it }
+
+    private fun exchange(
+        url: String = "https://api.test/login?token=abcdefghijklmnop&page=1",
+        requestBody: String? = """{"user":"ana","password":"hunter2"}""",
+        responseBody: ByteArray? = """{"ok":true,"access_token":"zzzzzzzzzzzz9999"}""".encodeToByteArray(),
+        startedAt: Long = clock,
+    ) = HttpExchange(
+        source = "test",
+        method = "POST",
+        url = url,
+        requestHeaders = listOf(Header("Authorization", "Bearer abcdefghijkl1234"), Header("Accept", "*/*")),
+        requestBody = requestBody?.encodeToByteArray(),
+        requestContentType = "application/json",
+        status = 200,
+        responseHeaders = listOf(Header("Set-Cookie", "sid=1")),
+        responseBody = responseBody,
+        responseContentType = "application/json",
+        startedAt = startedAt,
+        durationMs = 42,
+    )
+
+    private suspend fun AuditEngine.httpEvents(): List<AuditEvent> =
+        summaries(Category.Http, null, 100).first().mapNotNull { event(it.id) }
+
+    @Test
+    fun masksSecretsBeforeWriting() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange())
+            engine.flush()
+            val event = engine.httpEvents().single()
+            val http = event.payload as HttpPayload
+            assertEquals("https://api.test/login?token=••••mnop&page=1", http.url)
+            assertEquals("Bearer ••••1234", http.requestHeaders.first { it.name == "Authorization" }.value)
+            assertEquals("••••", http.responseHeaders.single().value)
+            val request = engine.body(http.requestBody!!)!!.decodeToString()
+            assertTrue("\"password\":\"••••\"" in request)
+            assertFalse("hunter2" in request)
+            val response = engine.body(http.responseBody!!)!!.decodeToString()
+            assertTrue("••••9999" in response)
+            assertEquals("POST api.test/login 200", event.title)
+        }
+
+    @Test
+    fun showModeKeepsSecretsButExportMasksByDefault() =
+        runBlocking<Unit> {
+            val engine = engine { secrets = Secrets.Show }
+            engine.recordHttp(exchange())
+            engine.flush()
+            val http = engine.httpEvents().single().payload as HttpPayload
+            assertEquals("Bearer abcdefghijkl1234", http.requestHeaders.first().value)
+            assertTrue("hunter2" in engine.body(http.requestBody!!)!!.decodeToString())
+
+            val masked = engine.exportHar(includeSecrets = false)
+            assertFalse("hunter2" in masked)
+            assertFalse("abcdefghijkl1234" in masked)
+            val revealed = engine.exportHar(includeSecrets = true)
+            assertTrue("hunter2" in revealed)
+            assertFalse("abcdefghijkl1234" in engine.exportJsonl(includeSecrets = false))
+        }
+
+    @Test
+    fun harExportFollowsSpec() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange())
+            engine.flush()
+            val har = Json.parseToJsonElement(engine.exportHar(false)).jsonObject["log"]!!.jsonObject
+            assertEquals("1.2", har["version"]!!.jsonPrimitive.content)
+            val entry = har["entries"]!!.jsonArray.single().jsonObject
+            val request = entry["request"]!!.jsonObject
+            assertEquals("POST", request["method"]!!.jsonPrimitive.content)
+            assertEquals("page", request["queryString"]!!.jsonArray[1].jsonObject["name"]!!.jsonPrimitive.content)
+            assertTrue(request["postData"]!!.jsonObject["text"]!!.jsonPrimitive.content.contains("ana"))
+            val response = entry["response"]!!.jsonObject
+            assertEquals(200, response["status"]!!.jsonPrimitive.content.toInt())
+            assertEquals("2023-11-14T22:13:20Z", entry["startedDateTime"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun bodiesAboveLimitKeepOnlySize() =
+        runBlocking<Unit> {
+            val engine = engine { maxBodySize = 8 }
+            engine.recordHttp(exchange())
+            engine.flush()
+            val http = engine.httpEvents().single().payload as HttpPayload
+            assertFalse(http.requestBody!!.stored)
+            assertNull(http.requestBody!!.hash)
+            assertNull(engine.body(http.requestBody!!))
+        }
+
+    @Test
+    fun identicalBodiesAreStoredOnce() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(3) { engine.recordHttp(exchange()) }
+            engine.flush()
+            val blobs = driver.executeQuery(null, "SELECT COUNT(*) FROM audit_blob", { it.next(); app.cash.sqldelight.db.QueryResult.Value(it.getLong(0)) }, 0).value
+            assertEquals(2L, blobs)
+        }
+
+    @Test
+    fun hashChainDetectsTampering() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(3) { engine.recordHttp(exchange()) }
+            engine.flush()
+            val report = engine.verify()
+            assertTrue(report.valid)
+            assertEquals(3, report.checked)
+            driver.execute(null, "UPDATE audit_event SET title = 'forged' WHERE seq = 3", 0)
+            val broken = engine.verify()
+            assertFalse(broken.valid)
+            assertNotNull(broken.brokenAt)
+        }
+
+    @Test
+    fun retentionPurgesOldEventsAndKeepsChainValid() =
+        runBlocking<Unit> {
+            val engine = engine { retention = 7.days }
+            engine.recordHttp(exchange(startedAt = clock - 10.days.inWholeMilliseconds))
+            engine.recordHttp(exchange(startedAt = clock))
+            engine.flush()
+            engine.purgeNow()
+            val titles = engine.summaries(null, null, 100).first()
+            assertEquals(1, titles.count { it.category == Category.Http })
+            val purged = titles.first { it.category == Category.Audit }
+            assertEquals("1 events purged", purged.title)
+            assertTrue(engine.verify().valid)
+        }
+
+    @Test
+    fun storageLimitPurgesOldestEvents() =
+        runBlocking<Unit> {
+            val engine = engine { maxStorage = 4_000 }
+            repeat(40) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            engine.purgeNow()
+            val remaining = engine.summaries(Category.Http, null, 100).first()
+            assertTrue(remaining.size in 1 until 40)
+            assertTrue(remaining.none { it.title.contains("/item/0 ") })
+            assertTrue(engine.verify().valid)
+        }
+
+    @Test
+    fun fullQueueRecordsDroppedEvents() =
+        runBlocking<Unit> {
+            val executor = Executors.newSingleThreadExecutor()
+            val gate = CountDownLatch(1)
+            executor.submit { gate.await() }
+            val engine = engine(context = executor.asCoroutineDispatcher()) { queueCapacity = 2 }
+            repeat(5) { engine.recordHttp(exchange()) }
+            gate.countDown()
+            engine.flush()
+            val dropped = engine.summaries(Category.Audit, null, 100).first().map { it.title }
+            assertTrue(dropped.any { it.endsWith("events dropped") }, dropped.toString())
+            engine.shutdown()
+            engines -= engine
+            executor.shutdown()
+        }
+
+    @Test
+    fun disabledCategoryIsNotRecorded() =
+        runBlocking<Unit> {
+            val engine = engine { categories = setOf(Category.Audit) }
+            engine.recordHttp(exchange())
+            engine.flush()
+            assertTrue(engine.summaries(Category.Http, null, 100).first().isEmpty())
+        }
+
+    @Test
+    fun clearRemovesEverythingAndLeavesAMarker() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange())
+            engine.flush()
+            engine.clear()
+            val rows = engine.summaries(null, null, 100).first()
+            assertEquals(listOf("1 events cleared"), rows.map { it.title }.filter { "cleared" in it })
+            assertTrue(rows.none { it.category == Category.Http })
+        }
+
+    @Test
+    fun searchFiltersByTitle() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange(url = "https://api.test/users"))
+            engine.recordHttp(exchange(url = "https://api.test/orders"))
+            engine.flush()
+            assertEquals(1, engine.summaries(Category.Http, "orders", 100).first().size)
+        }
+}
