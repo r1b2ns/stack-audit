@@ -49,3 +49,5 @@ internal actual fun platformLog(message: String) {
 }
 
 private const val DATABASE = "stackaudit.db"
+
+internal actual fun platformAppId(): String = platform.Foundation.NSBundle.mainBundle.bundleIdentifier ?: "ios"

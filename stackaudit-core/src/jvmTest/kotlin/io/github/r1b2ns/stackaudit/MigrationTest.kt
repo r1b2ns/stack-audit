@@ -30,7 +30,7 @@ class MigrationTest {
                     QueryResult.Value(cursor.getLong(0))
                 }, 0).value
             assertEquals(3L, refs)
-            assertEquals(3L, StackAuditDatabase.Schema.version)
+            assertEquals(4L, StackAuditDatabase.Schema.version)
         }
     }
 }

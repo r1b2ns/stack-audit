@@ -84,6 +84,37 @@ internal class AuditEngine(
         offer(Pending.Flag(flag, timestamp))
     }
 
+    val deviceId: String =
+        queries.setting(DEVICE_ID).executeAsOneOrNull() ?: Uuid.random().toString().also { queries.saveSetting(DEVICE_ID, it) }
+
+    val nonceStore: NonceStore =
+        object : NonceStore {
+            override fun seen(nonce: String): Boolean = queries.nonceCount(nonce).executeAsOne() > 0
+
+            override fun remember(
+                nonce: String,
+                expiresAt: Long,
+            ) {
+                queries.saveNonce(nonce, expiresAt)
+            }
+        }
+
+    private val keepRaw: Boolean get() = config.secrets is Secrets.ShowAfterHandshake
+
+    suspend fun rawPayload(id: String): AuditPayload? =
+        withContext(context) {
+            queries.secretById(id).executeAsOneOrNull()?.let { data ->
+                runCatching { AuditJson.decodeFromString(AuditPayload.serializer(), cipher.decrypt(data).decodeToString()) }.getOrNull()
+            }
+        }
+
+    private fun saveSecret(
+        seq: Long,
+        raw: AuditPayload,
+    ) {
+        queries.insertSecret(seq, cipher.encrypt(AuditJson.encodeToString(AuditPayload.serializer(), raw).encodeToByteArray()))
+    }
+
     val overrideStore: OverrideStore =
         object : OverrideStore {
             override fun load(): Map<String, FlagValue> =
@@ -289,6 +320,21 @@ internal class AuditEngine(
                     payload = payload,
                 )
             listOfNotNull(request, response).forEach { storeBlob(seq, it) }
+            if (keepRaw) {
+                val rawRequest = body(exchange.requestBody, exchange.requestContentType, exchange.requestBodySize, false)
+                val rawResponse = body(exchange.responseBody, exchange.responseContentType, exchange.responseBodySize, false)
+                listOfNotNull(rawRequest, rawResponse).forEach { storeBlob(seq, it) }
+                saveSecret(
+                    seq,
+                    payload.copy(
+                        url = exchange.url,
+                        requestHeaders = exchange.requestHeaders,
+                        responseHeaders = exchange.responseHeaders,
+                        requestBody = rawRequest?.ref,
+                        responseBody = rawResponse?.ref,
+                    ),
+                )
+            }
             queries.insertHttp(
                 seq,
                 exchange.method,
@@ -331,6 +377,11 @@ internal class AuditEngine(
         database.transaction {
             val seq = insert(frame.timestamp, null, Category.WebSocket, frame.source, frame.connectionId, title, payload)
             stored?.let { storeBlob(seq, it) }
+            if (keepRaw) {
+                val raw = body(frame.data, if (frame.isText) null else BINARY, null, false)
+                raw?.let { storeBlob(seq, it) }
+                saveSecret(seq, payload.copy(url = frame.url, body = raw?.ref))
+            }
         }
     }
 
@@ -354,7 +405,8 @@ internal class AuditEngine(
             }
         val title = listOfNotNull(change.store, verb, change.key).joinToString(" ")
         database.transaction {
-            insert(change.timestamp, null, Category.Storage, change.source, null, title, payload)
+            val seq = insert(change.timestamp, null, Category.Storage, change.source, null, title, payload)
+            if (keepRaw) saveSecret(seq, payload.copy(oldValue = limit(change.oldValue), newValue = limit(change.newValue)))
         }
     }
 
@@ -372,7 +424,8 @@ internal class AuditEngine(
         val compact = statement.sql.replace(Regex("\\s+"), " ").trim()
         val title = "${statement.database}: " + if (compact.length > TITLE_SQL) compact.take(TITLE_SQL) + "…" else compact
         database.transaction {
-            insert(statement.timestamp, statement.durationMs, Category.Database, statement.source, null, title, payload)
+            val seq = insert(statement.timestamp, statement.durationMs, Category.Database, statement.source, null, title, payload)
+            if (keepRaw) saveSecret(seq, payload.copy(arguments = raw.map(::limit)))
         }
     }
 
@@ -391,7 +444,8 @@ internal class AuditEngine(
                 else -> ""
             }
         database.transaction {
-            insert(call.timestamp, null, Category.Analytics, call.provider, null, "${call.provider}: ${call.name}$marker", payload)
+            val seq = insert(call.timestamp, null, Category.Analytics, call.provider, null, "${call.provider}: ${call.name}$marker", payload)
+            if (keepRaw) saveSecret(seq, payload.copy(params = call.params.mapValues { (_, value) -> limit(value?.let(::describe)) }))
         }
     }
 
@@ -481,6 +535,7 @@ internal class AuditEngine(
             if (count == 0L) break
             deleteThrough(queries.seqAtOffset(maxOf(1, count / 10) - 1).executeAsOne())
         }
+        queries.deleteExpiredNonces(now())
         val removed = before - queries.countEvents().executeAsOne()
         if (removed > 0) writeMeta(MetaPayload(MetaKind.Purged, "$removed events purged", removed), now())
     }
@@ -489,6 +544,7 @@ internal class AuditEngine(
         database.transaction {
             queries.deleteHttpUpTo(seq)
             queries.deleteRefsUpTo(seq)
+            queries.deleteSecretsUpTo(seq)
             queries.deleteUpTo(seq)
             queries.deleteOrphanBlobs()
         }
@@ -501,6 +557,7 @@ internal class AuditEngine(
         database.transaction {
             queries.deleteAllHttp()
             queries.deleteAllRefs()
+            queries.deleteAllSecrets()
             queries.deleteAllEvents()
             queries.deleteAllBlobs()
         }
@@ -552,6 +609,7 @@ internal class AuditEngine(
         const val MAX_PURGE_ROUNDS = 20
         const val BINARY = "application/octet-stream"
         const val TITLE_SQL = 80
+        const val DEVICE_ID = "device_id"
     }
 }
 

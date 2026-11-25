@@ -21,3 +21,5 @@ internal actual fun isDebuggableBuild(): Boolean = true
 internal actual fun platformLog(message: String) {
     System.err.println(message)
 }
+
+internal actual fun platformAppId(): String = System.getProperty("stackaudit.appId") ?: "jvm"

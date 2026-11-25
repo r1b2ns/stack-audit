@@ -44,6 +44,21 @@ CREATE TABLE audit_flag_override (
     value TEXT NOT NULL
 );
 
+CREATE TABLE audit_setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE audit_nonce (
+    nonce TEXT NOT NULL PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE audit_secret (
+    event_seq INTEGER NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+);
+
 insertEvent:
 INSERT INTO audit_event(id, timestamp, duration, category, source, trace_id, title, payload, size, prev_hash, hash)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -130,3 +145,30 @@ INSERT OR REPLACE INTO audit_flag_override(key, value) VALUES (?, ?);
 
 deleteFlagOverride:
 DELETE FROM audit_flag_override WHERE key = ?;
+
+setting:
+SELECT value FROM audit_setting WHERE key = ?;
+
+saveSetting:
+INSERT OR REPLACE INTO audit_setting(key, value) VALUES (?, ?);
+
+nonceCount:
+SELECT COUNT(*) FROM audit_nonce WHERE nonce = ?;
+
+saveNonce:
+INSERT OR REPLACE INTO audit_nonce(nonce, expires_at) VALUES (?, ?);
+
+deleteExpiredNonces:
+DELETE FROM audit_nonce WHERE expires_at < ?;
+
+insertSecret:
+INSERT OR REPLACE INTO audit_secret(event_seq, data) VALUES (?, ?);
+
+secretById:
+SELECT s.data FROM audit_secret s JOIN audit_event e ON e.seq = s.event_seq WHERE e.id = ?;
+
+deleteSecretsUpTo:
+DELETE FROM audit_secret WHERE event_seq <= ?;
+
+deleteAllSecrets:
+DELETE FROM audit_secret;

@@ -41,3 +41,5 @@ internal actual fun isDebuggableBuild(): Boolean {
 internal actual fun platformLog(message: String) {
     Log.w("StackAudit", message)
 }
+
+internal actual fun platformAppId(): String = StackAuditAndroid.context?.packageName ?: "android"

@@ -240,6 +240,12 @@ public enum class MetaKind {
 
     @SerialName("capture_error")
     CaptureError,
+
+    @SerialName("handshake_accepted")
+    HandshakeAccepted,
+
+    @SerialName("handshake_rejected")
+    HandshakeRejected,
 }
 
 @Serializable

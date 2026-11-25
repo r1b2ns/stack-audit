@@ -1,6 +1,8 @@
 package io.github.r1b2ns.stackaudit
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 
 public object StackAudit :
@@ -69,7 +71,22 @@ public object StackAudit :
         limit: Long = 500,
     ): Flow<List<AuditEventSummary>> = flowOf(emptyList())
 
-    public suspend fun event(id: String): AuditEvent? = null
+    public val session: StateFlow<AuditSession?> = MutableStateFlow(null)
+
+    public val deviceId: String? get() = null
+
+    public fun allows(scope: Scope): Boolean = false.also { scope.hashCode() }
+
+    public fun handshake(token: String): HandshakeResult = HandshakeResult.Rejected("StackAudit is disabled").also { token.hashCode() }
+
+    public fun handleLink(url: String): Boolean = false.also { url.hashCode() }
+
+    public fun endSession() {}
+
+    public suspend fun event(
+        id: String,
+        revealSecrets: Boolean = false,
+    ): AuditEvent? = null.also { id.hashCode() + revealSecrets.hashCode() }
 
     public suspend fun body(ref: BodyRef): ByteArray? = null
 

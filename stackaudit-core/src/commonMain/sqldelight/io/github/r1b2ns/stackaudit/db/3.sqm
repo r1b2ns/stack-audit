@@ -1,0 +1,14 @@
+CREATE TABLE audit_setting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE audit_nonce (
+    nonce TEXT NOT NULL PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE TABLE audit_secret (
+    event_seq INTEGER NOT NULL PRIMARY KEY,
+    data BLOB NOT NULL
+);

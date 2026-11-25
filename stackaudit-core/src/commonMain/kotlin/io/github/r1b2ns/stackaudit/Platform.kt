@@ -9,3 +9,5 @@ internal expect fun platformCipher(): BlobCipher
 internal expect fun isDebuggableBuild(): Boolean
 
 internal expect fun platformLog(message: String)
+
+internal expect fun platformAppId(): String

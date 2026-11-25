@@ -79,6 +79,7 @@ public sealed class Access {
     public data class Handshake(
         val publicKey: String,
         val sessionTtl: Duration = 30.minutes,
+        val appId: String? = null,
     ) : Access()
 
     public data object Hidden : Access()
