@@ -12,7 +12,7 @@ final class ScenariosTests: XCTestCase {
     }
 
     func testScenariosUseHttps() {
-        XCTAssertTrue(Scenarios.all.allSatisfy { $0.url.hasPrefix("https://") || $0.url.hasPrefix("wss://") })
+        XCTAssertTrue(Scenarios.all.allSatisfy { $0.url.hasPrefix("https://") || $0.url.hasPrefix("wss://") || $0.url.hasPrefix("local://") })
     }
 
     func testSecretsScenarioCarriesSecrets() {

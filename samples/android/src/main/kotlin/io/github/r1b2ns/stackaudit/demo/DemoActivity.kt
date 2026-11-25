@@ -38,7 +38,7 @@ import io.github.r1b2ns.stackaudit.StackAudit
 import kotlinx.coroutines.launch
 
 class DemoActivity : ComponentActivity() {
-    private val runner = DemoRunner()
+    private val runner by lazy { DemoRunner(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

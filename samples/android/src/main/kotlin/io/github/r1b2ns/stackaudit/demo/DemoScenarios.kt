@@ -5,7 +5,15 @@ import io.github.r1b2ns.stackaudit.okhttp.audited
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
+import android.content.Context
+import app.cash.sqldelight.db.AfterVersion
+import app.cash.sqldelight.db.QueryResult
+import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.db.SqlSchema
+import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import io.github.r1b2ns.stackaudit.ktor.auditedWebSocket
+import io.github.r1b2ns.stackaudit.sqldelight.audited
+import io.github.r1b2ns.stackaudit.storage.auditedSharedPreferences
 import io.github.r1b2ns.stackaudit.okhttp.newAuditedWebSocket
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.WebSockets
@@ -27,7 +35,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-enum class Client { OkHttp, Ktor, OkHttpWebSocket, KtorWebSocket }
+enum class Client { OkHttp, Ktor, OkHttpWebSocket, KtorWebSocket, SharedPreferences, SqlDelight }
 
 data class Scenario(
     val title: String,
@@ -63,13 +71,36 @@ object DemoScenarios {
             Scenario("Ktor GET", Client.Ktor, "GET", "$BIN/get?source=ktor"),
             Scenario("OkHttp WebSocket echo", Client.OkHttpWebSocket, "WS", "$ECHO?token=abcdefghijklmnop"),
             Scenario("Ktor WebSocket echo", Client.KtorWebSocket, "WS", ECHO),
+            Scenario("SharedPreferences write", Client.SharedPreferences, "PREFS", "local://demo_prefs"),
+            Scenario("SQLDelight statements", Client.SqlDelight, "SQL", "local://demo.db"),
         )
+}
+
+object DemoSchema : SqlSchema<QueryResult.Value<Unit>> {
+    override val version: Long = 1
+
+    override fun create(driver: SqlDriver): QueryResult.Value<Unit> {
+        driver.execute(null, "CREATE TABLE user(id INTEGER PRIMARY KEY, name TEXT, password TEXT)", 0)
+        return QueryResult.Unit
+    }
+
+    override fun migrate(
+        driver: SqlDriver,
+        oldVersion: Long,
+        newVersion: Long,
+        vararg callbacks: AfterVersion,
+    ): QueryResult.Value<Unit> = QueryResult.Unit
 }
 
 const val MESSAGE = """{"type":"chat","text":"hello","password":"hunter2"}"""
 
-class DemoRunner {
+class DemoRunner(
+    private val context: Context,
+) {
     private val okHttp = OkHttpClient.Builder().audited().build()
+    private val database by lazy {
+        AndroidSqliteDriver(DemoSchema, context, "demo.db").audited("demo.db")
+    }
     private val ktor =
         HttpClient(Android) {
             install(StackAuditKtor)
@@ -88,6 +119,25 @@ class DemoRunner {
                     "${response.status.value} · ${response.bodyAsText().length} chars"
                 }
                 Client.OkHttpWebSocket -> okHttpSocket(scenario.url)
+                Client.SharedPreferences -> {
+                    val prefs = context.auditedSharedPreferences("demo_prefs")
+                    prefs.edit().putString("theme", if (prefs.getString("theme", "light") == "light") "dark" else "light").apply()
+                    prefs.edit().putString("access_token", "abcdefghijkl1234").putInt("launches", prefs.getInt("launches", 0) + 1).apply()
+                    "3 writes"
+                }
+                Client.SqlDelight ->
+                    withContext(Dispatchers.IO) {
+                        database.execute(null, "INSERT INTO user(name, password) VALUES (?, ?)", 2) {
+                            bindString(0, "ana")
+                            bindString(1, "hunter2")
+                        }
+                        val count =
+                            database.executeQuery(null, "SELECT COUNT(*) FROM user", { cursor ->
+                                cursor.next()
+                                QueryResult.Value(cursor.getLong(0))
+                            }, 0).value
+                        "$count users"
+                    }
                 Client.KtorWebSocket -> {
                     var echoed = ""
                     ktorSockets.auditedWebSocket(scenario.url) {

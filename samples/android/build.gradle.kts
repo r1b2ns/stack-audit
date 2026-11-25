@@ -28,6 +28,8 @@ dependencies {
     implementation(project(":stackaudit-android"))
     implementation(project(":stackaudit-ktor"))
     implementation(project(":stackaudit-ui"))
+    implementation(project(":stackaudit-sqldelight"))
+    implementation(libs.sqldelight.android.driver)
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.cio)
     implementation(libs.androidx.activity.compose)

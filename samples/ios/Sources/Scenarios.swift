@@ -1,5 +1,6 @@
 import Alamofire
 import Foundation
+import SQLite3
 import StackAudit
 
 enum DemoClient: String, CaseIterable {
@@ -7,6 +8,8 @@ enum DemoClient: String, CaseIterable {
     case alamofire = "Alamofire"
     case pinned = "Alamofire + pinning"
     case webSocket = "URLSession WebSocket"
+    case userDefaults = "UserDefaults"
+    case sqlite = "SQLite"
 }
 
 struct Scenario: Identifiable, Hashable {
@@ -51,6 +54,8 @@ enum Scenarios {
         ),
         Scenario(title: "Pinning rejects (expected failure)", client: .pinned, method: "GET", url: "\(bin)/get?source=pinning"),
         Scenario(title: "WebSocket echo", client: .webSocket, method: "WS", url: "wss://echo.websocket.org/?token=abcdefghijklmnop"),
+        Scenario(title: "UserDefaults write", client: .userDefaults, method: "DEFAULTS", url: "local://standard"),
+        Scenario(title: "SQLite statements", client: .sqlite, method: "SQL", url: "local://demo.sqlite"),
     ]
 }
 
@@ -81,7 +86,34 @@ final class DemoRunner {
             return await run(pinned, request)
         case .webSocket:
             return await echo(url)
+        case .userDefaults:
+            let defaults = UserDefaults.standard
+            defaults.set(defaults.string(forKey: "theme") == "dark" ? "light" : "dark", forKey: "theme")
+            defaults.set("abcdefghijkl1234", forKey: "access_token")
+            defaults.set(defaults.integer(forKey: "launches") + 1, forKey: "launches")
+            return "3 writes"
+        case .sqlite:
+            return sqliteDemo()
         }
+    }
+
+    private lazy var database: OpaquePointer? = {
+        var db: OpaquePointer?
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("demo.sqlite").path
+        guard sqlite3_open(path, &db) == SQLITE_OK, let db else { return nil }
+        StackAuditSQL.trace(db, name: "demo.sqlite")
+        sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS user(id INTEGER PRIMARY KEY, name TEXT, password TEXT)", nil, nil, nil)
+        return db
+    }()
+
+    private func sqliteDemo() -> String {
+        guard let db = database else { return "Failed to open" }
+        sqlite3_exec(db, "INSERT INTO user(name, password) VALUES ('ana', 'hunter2')", nil, nil, nil)
+        StackAuditSQL.record(database: "demo.sqlite", sql: "UPDATE user SET password = ? WHERE name = ?", arguments: ["hunter3", "ana"], durationMs: 1, rowsAffected: 1)
+        var statement: OpaquePointer?
+        sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM user", -1, &statement, nil)
+        defer { sqlite3_finalize(statement) }
+        return sqlite3_step(statement) == SQLITE_ROW ? "\(sqlite3_column_int(statement, 0)) users" : "Failed"
     }
 
     private func echo(_ url: URL) async -> String {

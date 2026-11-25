@@ -13,7 +13,7 @@ class DemoScenariosTest {
 
     @Test
     fun scenariosUseHttpsAndCoverBothClients() {
-        assertTrue(DemoScenarios.all.all { it.url.startsWith("https://") || it.url.startsWith("wss://") })
+        assertTrue(DemoScenarios.all.all { it.url.startsWith("https://") || it.url.startsWith("wss://") || it.url.startsWith("local://") })
         assertEquals(Client.entries.toSet(), DemoScenarios.all.map { it.client }.toSet())
     }
 
