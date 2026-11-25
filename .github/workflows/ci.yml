@@ -29,9 +29,27 @@ jobs:
           :stackaudit-ui:jvmTest
           :stackaudit-ui:testAndroidHostTest
           :stackaudit-android:testAndroidHostTest
+          :stackaudit-cli:test
           :sample-android:testDebugUnitTest
           :sample-android:assembleDebug
           --continue
+      - name: Gradle plugin tests
+        working-directory: stackaudit-gradle-plugin
+        run: ../gradlew test
+
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter/stackaudit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
 
   ios:
     runs-on: macos-15
