@@ -20,10 +20,14 @@ include(
     ":stackaudit-core",
     ":stackaudit-ktor",
     ":stackaudit-android",
+    ":stackaudit-sqldelight",
+    ":stackaudit-settings",
     ":stackaudit-ui",
     ":stackaudit-apple",
     ":stackaudit-noop",
     ":stackaudit-ktor-noop",
+    ":stackaudit-sqldelight-noop",
+    ":stackaudit-settings-noop",
 )
 
 include(":sample-android")
