@@ -199,10 +199,11 @@ internal object SqlLiterals {
         }
         val strings = strings(sql)
         comparison.findAll(sql).forEach { match ->
-            val literal = match.groups[2] ?: return@forEach
+            val value = match.groupValues[2]
+            val literal = (match.range.last - value.length + 1)..match.range.last
             val insideString = strings.any { match.range.first > it.first && match.range.first <= it.last }
-            if (!insideString && isSecret(match.groupValues[1]) && ranges.none { it.first <= literal.range.first && literal.range.last <= it.last }) {
-                ranges += literal.range
+            if (!insideString && isSecret(match.groupValues[1]) && ranges.none { it.first <= literal.first && literal.last <= it.last }) {
+                ranges += literal
             }
         }
         if (ranges.isEmpty()) return sql
