@@ -5,7 +5,9 @@ import kotlinx.coroutines.flow.flowOf
 
 public object StackAudit :
     HttpRecorder,
-    WebSocketRecorder {
+    WebSocketRecorder,
+    StorageRecorder,
+    DatabaseRecorder {
     public val isStarted: Boolean get() = false
 
     public val config: StackAuditConfig? get() = null
@@ -13,6 +15,10 @@ public object StackAudit :
     override val isCapturing: Boolean get() = false
 
     override val isCapturingWebSockets: Boolean get() = false
+
+    override val isCapturingStorage: Boolean get() = false
+
+    override val isCapturingDatabase: Boolean get() = false
 
     override val maxBodySize: Long get() = 0
 
@@ -35,6 +41,10 @@ public object StackAudit :
     override fun record(exchange: HttpExchange) {}
 
     override fun record(frame: WebSocketFrame) {}
+
+    override fun record(change: StorageChange) {}
+
+    override fun record(statement: DatabaseStatement) {}
 
     public fun events(
         category: Category? = null,

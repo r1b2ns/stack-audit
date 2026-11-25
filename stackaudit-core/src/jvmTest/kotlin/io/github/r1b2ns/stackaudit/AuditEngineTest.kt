@@ -294,4 +294,48 @@ class AuditEngineTest {
             val ref = (engine.event(remaining.id)!!.payload as WebSocketPayload).body!!
             assertEquals("same", engine.body(ref)!!.decodeToString())
         }
+
+    @Test
+    fun recordsStorageChangesWithMasking() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordStorage(StorageChange("shared_preferences", "prefs", "token", StorageOperation.Write, clock, "old-value-123456", "new-value-abcdef"))
+            engine.recordStorage(StorageChange("shared_preferences", "prefs", "theme", StorageOperation.Write, clock, null, "dark"))
+            engine.recordStorage(StorageChange("shared_preferences", "prefs", null, StorageOperation.Clear, clock))
+            engine.flush()
+            val rows = engine.summaries(Category.Storage, null, 100).first().reversed()
+            assertEquals(listOf("prefs set token", "prefs set theme", "prefs clear"), rows.map { it.title })
+            val token = engine.event(rows[0].id)!!.payload as StoragePayload
+            assertEquals("••••3456", token.oldValue)
+            assertEquals("••••cdef", token.newValue)
+            assertEquals("dark", (engine.event(rows[1].id)!!.payload as StoragePayload).newValue)
+        }
+
+    @Test
+    fun recordsDatabaseStatementsWithMaskedArguments() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordDatabase(
+                DatabaseStatement("sqldelight", "app.db", "UPDATE user SET password = ? WHERE id = ?", clock, listOf("hunter2", 7L), 3, 1),
+            )
+            engine.recordDatabase(DatabaseStatement("sqldelight", "app.db", "SELECT * FROM blobs WHERE data = ?", clock, listOf(byteArrayOf(1, 2))))
+            engine.flush()
+            val rows = engine.summaries(Category.Database, null, 100).first().reversed()
+            assertEquals("app.db: UPDATE user SET password = ? WHERE id = ?", rows[0].title)
+            val first = engine.event(rows[0].id)!!.payload as DatabasePayload
+            assertEquals(listOf("••••", "7"), first.arguments)
+            assertEquals(1L, first.rowsAffected)
+            assertEquals(3L, rows[0].durationMs)
+            assertEquals(listOf("<2 bytes>"), (engine.event(rows[1].id)!!.payload as DatabasePayload).arguments)
+        }
+
+    @Test
+    fun showModeKeepsStorageValues() =
+        runBlocking<Unit> {
+            val engine = engine { secrets = Secrets.Show }
+            engine.recordStorage(StorageChange("user_defaults", "standard", "token", StorageOperation.Write, clock, null, "abc"))
+            engine.flush()
+            val row = engine.summaries(Category.Storage, null, 10).first().single()
+            assertEquals("abc", (engine.event(row.id)!!.payload as StoragePayload).newValue)
+        }
 }

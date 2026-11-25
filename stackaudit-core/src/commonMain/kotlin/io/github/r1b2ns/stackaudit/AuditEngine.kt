@@ -61,6 +61,16 @@ internal class AuditEngine(
         offer(Pending.WebSocket(frame))
     }
 
+    fun recordStorage(change: StorageChange) {
+        if (Category.Storage !in config.categories) return
+        offer(Pending.Storage(change))
+    }
+
+    fun recordDatabase(statement: DatabaseStatement) {
+        if (Category.Database !in config.categories) return
+        offer(Pending.Database(statement))
+    }
+
     fun recordMeta(
         kind: MetaKind,
         message: String,
@@ -188,6 +198,8 @@ internal class AuditEngine(
         when (item) {
             is Pending.Http -> safely { writeHttp(item.exchange) }
             is Pending.WebSocket -> safely { writeWebSocket(item.frame) }
+            is Pending.Storage -> safely { writeStorage(item.change) }
+            is Pending.Database -> safely { writeDatabase(item.statement) }
             is Pending.Meta -> safely { writeMeta(item.payload, item.timestamp) }
             is Pending.Purge -> {
                 safely { purge() }
@@ -286,6 +298,60 @@ internal class AuditEngine(
             val seq = insert(frame.timestamp, null, Category.WebSocket, frame.source, frame.connectionId, title, payload)
             stored?.let { storeBlob(seq, it) }
         }
+    }
+
+    private fun writeStorage(change: StorageChange) {
+        val scrub = config.secrets.masksOnWrite
+        val payload =
+            StoragePayload(
+                store = change.store,
+                key = change.key,
+                operation = change.operation,
+                oldValue = limit(if (scrub) writeScrubber.storageValue(change.key, change.oldValue) else change.oldValue),
+                newValue = limit(if (scrub) writeScrubber.storageValue(change.key, change.newValue) else change.newValue),
+                valueType = change.valueType,
+            )
+        val verb =
+            when (change.operation) {
+                StorageOperation.Read -> "read"
+                StorageOperation.Write -> "set"
+                StorageOperation.Remove -> "remove"
+                StorageOperation.Clear -> "clear"
+            }
+        val title = listOfNotNull(change.store, verb, change.key).joinToString(" ")
+        database.transaction {
+            insert(change.timestamp, null, Category.Storage, change.source, null, title, payload)
+        }
+    }
+
+    private fun writeDatabase(statement: DatabaseStatement) {
+        val raw = statement.arguments.map { it?.let(::describe) }
+        val arguments = if (config.secrets.masksOnWrite) writeScrubber.sqlArguments(statement.sql, raw) else raw
+        val payload =
+            DatabasePayload(
+                database = statement.database,
+                sql = statement.sql,
+                arguments = arguments.map(::limit),
+                rowsAffected = statement.rowsAffected,
+                error = statement.error,
+            )
+        val compact = statement.sql.replace(Regex("\\s+"), " ").trim()
+        val title = "${statement.database}: " + if (compact.length > TITLE_SQL) compact.take(TITLE_SQL) + "…" else compact
+        database.transaction {
+            insert(statement.timestamp, statement.durationMs, Category.Database, statement.source, null, title, payload)
+        }
+    }
+
+    private fun describe(value: Any): String =
+        when (value) {
+            is ByteArray -> "<${value.size} bytes>"
+            else -> value.toString()
+        }
+
+    private fun limit(value: String?): String? {
+        if (value == null) return null
+        val max = config.maxBodySize.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        return if (value.length > max) value.take(max) + "…" else value
     }
 
     private fun storeBlob(
@@ -402,6 +468,10 @@ internal class AuditEngine(
 
         class WebSocket(val frame: WebSocketFrame) : Pending
 
+        class Storage(val change: StorageChange) : Pending
+
+        class Database(val statement: DatabaseStatement) : Pending
+
         class Meta(val payload: MetaPayload, val timestamp: Long) : Pending
 
         class Purge(val done: CompletableDeferred<Unit>?) : Pending
@@ -414,6 +484,7 @@ internal class AuditEngine(
     private companion object {
         const val MAX_PURGE_ROUNDS = 20
         const val BINARY = "application/octet-stream"
+        const val TITLE_SQL = 80
     }
 }
 

@@ -104,6 +104,42 @@ public data class WebSocketPayload(
 ) : AuditPayload
 
 @Serializable
+public enum class StorageOperation {
+    @SerialName("read")
+    Read,
+
+    @SerialName("write")
+    Write,
+
+    @SerialName("remove")
+    Remove,
+
+    @SerialName("clear")
+    Clear,
+}
+
+@Serializable
+@SerialName("storage")
+public data class StoragePayload(
+    val store: String,
+    val key: String?,
+    val operation: StorageOperation,
+    val oldValue: String? = null,
+    val newValue: String? = null,
+    val valueType: String? = null,
+) : AuditPayload
+
+@Serializable
+@SerialName("database")
+public data class DatabasePayload(
+    val database: String,
+    val sql: String,
+    val arguments: List<String?> = emptyList(),
+    val rowsAffected: Long? = null,
+    val error: String? = null,
+) : AuditPayload
+
+@Serializable
 public enum class MetaKind {
     @SerialName("started")
     Started,
@@ -212,6 +248,40 @@ public interface WebSocketRecorder {
     public val maxBodySize: Long
 
     public fun record(frame: WebSocketFrame)
+}
+
+public class StorageChange(
+    public val source: String,
+    public val store: String,
+    public val key: String?,
+    public val operation: StorageOperation,
+    public val timestamp: Long,
+    public val oldValue: String? = null,
+    public val newValue: String? = null,
+    public val valueType: String? = null,
+)
+
+public interface StorageRecorder {
+    public val isCapturingStorage: Boolean
+
+    public fun record(change: StorageChange)
+}
+
+public class DatabaseStatement(
+    public val source: String,
+    public val database: String,
+    public val sql: String,
+    public val timestamp: Long,
+    public val arguments: List<Any?> = emptyList(),
+    public val durationMs: Long? = null,
+    public val rowsAffected: Long? = null,
+    public val error: String? = null,
+)
+
+public interface DatabaseRecorder {
+    public val isCapturingDatabase: Boolean
+
+    public fun record(statement: DatabaseStatement)
 }
 
 public fun interface AuditViewer {

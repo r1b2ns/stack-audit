@@ -13,7 +13,9 @@ import kotlin.time.Clock
 
 public object StackAudit :
     HttpRecorder,
-    WebSocketRecorder {
+    WebSocketRecorder,
+    StorageRecorder,
+    DatabaseRecorder {
     private val engine = MutableStateFlow<AuditEngine?>(null)
     private var viewer: AuditViewer? = null
 
@@ -24,6 +26,10 @@ public object StackAudit :
     override val isCapturing: Boolean get() = engine.value?.config?.categories?.contains(Category.Http) == true
 
     override val isCapturingWebSockets: Boolean get() = engine.value?.config?.categories?.contains(Category.WebSocket) == true
+
+    override val isCapturingStorage: Boolean get() = engine.value?.config?.categories?.contains(Category.Storage) == true
+
+    override val isCapturingDatabase: Boolean get() = engine.value?.config?.categories?.contains(Category.Database) == true
 
     override val maxBodySize: Long get() = engine.value?.config?.maxBodySize ?: 0
 
@@ -97,6 +103,14 @@ public object StackAudit :
 
     override fun record(frame: WebSocketFrame) {
         engine.value?.recordWebSocket(frame)
+    }
+
+    override fun record(change: StorageChange) {
+        engine.value?.recordStorage(change)
+    }
+
+    override fun record(statement: DatabaseStatement) {
+        engine.value?.recordDatabase(statement)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

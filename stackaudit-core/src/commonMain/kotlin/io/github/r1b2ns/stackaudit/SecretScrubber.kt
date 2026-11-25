@@ -77,6 +77,26 @@ public class SecretScrubber(private val rules: SecretRules) {
         return if (changed) result.toString() else text
     }
 
+    public fun storageValue(
+        key: String?,
+        value: String?,
+    ): String? {
+        if (value == null) return null
+        if (key != null && rules.isSecretField(key)) return mask(value)
+        return body(value, null)
+    }
+
+    public fun sqlArguments(
+        sql: String,
+        arguments: List<String?>,
+    ): List<String?> {
+        val columns = SqlColumns.forPlaceholders(sql)
+        return arguments.mapIndexed { index, value ->
+            val column = columns.getOrNull(index)
+            if (value != null && column != null && rules.isSecretField(column)) mask(value) else value
+        }
+    }
+
     private fun maskHeader(value: String): String {
         val space = value.indexOf(' ')
         val scheme = if (space > 0) value.substring(0, space) else ""
@@ -116,5 +136,39 @@ public class SecretScrubber(private val rules: SecretRules) {
             if (value.isEmpty() || value.startsWith(MASK)) return value
             return if (value.length >= MIN_TAIL_SOURCE) MASK + value.takeLast(TAIL) else MASK
         }
+    }
+}
+
+internal object SqlColumns {
+    private val insert = Regex("""insert\s+(?:or\s+\w+\s+)?into\s+[`"\[]?\w+[`"\]]?\s*\(([^)]*)\)\s*values\s*\(([^)]*)\)""", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+    private val identifier = Regex("""[`"\[]?(\w+)[`"\]]?\s*$""")
+    private val comparison = Regex("""(?:==|<>|!=|<=|>=|=|<|>|\blike\b|\bis\b)\s*$""", RegexOption.IGNORE_CASE)
+
+    fun forPlaceholders(sql: String): List<String?> {
+        insert.find(sql)?.let { match ->
+            val columns = match.groupValues[1].split(',').map { it.trim().trim('`', '"', '[', ']') }
+            val values = match.groupValues[2].split(',').map { it.trim() }
+            val mapped = values.mapIndexedNotNull { index, value -> if (value == "?") columns.getOrNull(index) else null }
+            val rest = sql.substring(match.range.last + 1)
+            return mapped + forComparisons(rest)
+        }
+        return forComparisons(sql)
+    }
+
+    private fun forComparisons(sql: String): List<String?> {
+        val result = mutableListOf<String?>()
+        var index = sql.indexOf('?')
+        while (index >= 0) {
+            val before = sql.substring(0, index)
+            val operator = comparison.find(before)
+            result +=
+                if (operator != null) {
+                    identifier.find(before.substring(0, operator.range.first))?.groupValues?.get(1)
+                } else {
+                    null
+                }
+            index = sql.indexOf('?', index + 1)
+        }
+        return result
     }
 }
