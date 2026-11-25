@@ -3,7 +3,11 @@ package io.github.r1b2ns.stackaudit.apple
 import io.github.r1b2ns.stackaudit.Access
 import io.github.r1b2ns.stackaudit.BlobCipher
 import io.github.r1b2ns.stackaudit.StackAuditIos
+import io.github.r1b2ns.stackaudit.AuditedFlags
 import io.github.r1b2ns.stackaudit.DatabaseStatement
+import io.github.r1b2ns.stackaudit.FlagProvider
+import io.github.r1b2ns.stackaudit.FlagValue
+import io.github.r1b2ns.stackaudit.TrackingPlan
 import io.github.r1b2ns.stackaudit.StorageChange
 import io.github.r1b2ns.stackaudit.StorageOperation
 import io.github.r1b2ns.stackaudit.WebSocketFrame
@@ -192,6 +196,31 @@ public object StackAuditBridge {
             ),
         )
     }
+
+    public fun recordAnalytics(
+        provider: String,
+        name: String,
+        params: Map<String, Any?>,
+    ) {
+        StackAudit.analytics.record(provider, name, params)
+    }
+
+    @Throws(IllegalArgumentException::class)
+    public fun setTrackingPlan(json: String?) {
+        StackAudit.analytics.plan =
+            json?.let {
+                try {
+                    TrackingPlan.fromJson(it)
+                } catch (error: Exception) {
+                    throw IllegalArgumentException("StackAudit: invalid tracking plan: ${error.message}")
+                }
+            }
+    }
+
+    public fun flags(
+        provider: String,
+        lookup: (String) -> FlagValue?,
+    ): AuditedFlags = StackAudit.flags.wrap(FlagProvider { lookup(it) }, provider)
 
     public fun show(): Boolean = StackAudit.show()
 }
