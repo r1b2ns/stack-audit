@@ -194,6 +194,8 @@ internal class AuditEngine(
                         method = it.method,
                         host = it.host,
                         status = it.status?.toInt(),
+                        requestSize = it.request_size,
+                        responseSize = it.response_size,
                     )
                 }
             }
@@ -342,6 +344,8 @@ internal class AuditEngine(
                 exchange.status?.toLong(),
                 request?.ref?.hash?.takeIf { request.data != null },
                 response?.ref?.hash?.takeIf { response.data != null },
+                request?.ref?.size,
+                response?.ref?.size,
             )
         }
     }
@@ -551,6 +555,15 @@ internal class AuditEngine(
             queries.deleteOrphanBlobs()
         }
     }
+
+    suspend fun stats(): AuditStats =
+        withContext(context) {
+            AuditStats(
+                events = queries.countEvents().executeAsOne(),
+                bytes = storageBytes(),
+                oldest = queries.oldestTimestamp().executeAsOne().oldest,
+            )
+        }
 
     private fun storageBytes(): Long = queries.eventBytes().executeAsOne() + queries.blobBytes().executeAsOne()
 

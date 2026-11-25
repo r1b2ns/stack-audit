@@ -30,7 +30,30 @@ class MigrationTest {
                     QueryResult.Value(cursor.getLong(0))
                 }, 0).value
             assertEquals(3L, refs)
-            assertEquals(4L, StackAuditDatabase.Schema.version)
+            assertEquals(5L, StackAuditDatabase.Schema.version)
+        }
+    }
+
+    @Test
+    fun versionFourDatabaseGainsBodySizes() {
+        val file = File.createTempFile("stackaudit", ".db").apply { deleteOnExit() }
+        val url = "jdbc:sqlite:${file.absolutePath}"
+        JdbcSqliteDriver(url, Properties()).use { old ->
+            listOf(
+                "CREATE TABLE audit_http (event_seq INTEGER NOT NULL PRIMARY KEY, method TEXT NOT NULL, host TEXT NOT NULL, status INTEGER, request_hash TEXT, response_hash TEXT)",
+                "INSERT INTO audit_http VALUES (1, 'GET', 'a.test', 200, NULL, 'res')",
+                "PRAGMA user_version = 4",
+            ).forEach { old.execute(null, it, 0) }
+        }
+        JdbcSqliteDriver(url, Properties(), StackAuditDatabase.Schema).use { driver ->
+            driver.execute(null, "INSERT INTO audit_http VALUES (2, 'POST', 'a.test', 201, NULL, NULL, 12, 34)", 0)
+            val sizes =
+                driver.executeQuery(null, "SELECT event_seq, request_size, response_size FROM audit_http ORDER BY event_seq", { cursor ->
+                    val rows = mutableListOf<Triple<Long, Long?, Long?>>()
+                    while (cursor.next().value) rows += Triple(cursor.getLong(0)!!, cursor.getLong(1), cursor.getLong(2))
+                    QueryResult.Value(rows)
+                }, 0).value
+            assertEquals(listOf(Triple(1L, null, null), Triple(2L, 12L, 34L)), sizes)
         }
     }
 }

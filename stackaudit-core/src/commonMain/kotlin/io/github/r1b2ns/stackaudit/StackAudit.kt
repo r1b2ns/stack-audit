@@ -231,6 +231,15 @@ public object StackAudit :
         engine.value?.clear()
     }
 
+    public suspend fun stats(): AuditStats = engine.value?.stats() ?: AuditStats(0, 0, null)
+
+    public fun recordExport(
+        description: String,
+        count: Long,
+    ) {
+        engine.value?.recordMeta(MetaKind.Exported, description, count)
+    }
+
     public suspend fun purge() {
         engine.value?.purgeNow()
     }

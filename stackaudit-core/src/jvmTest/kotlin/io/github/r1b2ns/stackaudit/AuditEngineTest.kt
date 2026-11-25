@@ -83,6 +83,41 @@ class AuditEngineTest {
         }
 
     @Test
+    fun statsCountEventsBytesAndOldest() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.flush()
+            val empty = engine.stats()
+            val first = clock
+            engine.recordHttp(exchange(startedAt = first))
+            clock += 5_000
+            engine.recordMeta(MetaKind.Exported, "JSON export of 2 events", 2)
+            engine.flush()
+            val stats = engine.stats()
+            assertEquals(empty.events + 2, stats.events)
+            assertTrue(stats.bytes > empty.bytes)
+            assertEquals(empty.oldest ?: first, stats.oldest)
+            val exported = engine.summaries(Category.Audit, "JSON export", 10).first().single()
+            assertEquals("JSON export of 2 events", exported.title)
+        }
+
+    @Test
+    fun summaryCarriesBodySizes() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange(requestBody = null))
+            engine.recordHttp(exchange())
+            engine.flush()
+            val (withBodies, withoutRequest) = engine.summaries(Category.Http, null, 10).first()
+            val http = engine.event(withBodies.id)!!.payload as HttpPayload
+            assertEquals(http.requestBody!!.size, withBodies.requestSize)
+            assertEquals(http.responseBody!!.size, withBodies.responseSize)
+            assertTrue(withBodies.requestSize!! > 0)
+            assertNull(withoutRequest.requestSize)
+            assertEquals(withBodies.responseSize, withoutRequest.responseSize)
+        }
+
+    @Test
     fun showModeKeepsSecretsButExportMasksByDefault() =
         runBlocking<Unit> {
             val engine = engine { secrets = Secrets.Show }
