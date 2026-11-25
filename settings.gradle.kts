@@ -24,6 +24,7 @@ include(
     ":stackaudit-settings",
     ":stackaudit-ui",
     ":stackaudit-apple",
+    ":stackaudit-cli",
     ":stackaudit-noop",
     ":stackaudit-ktor-noop",
     ":stackaudit-sqldelight-noop",
