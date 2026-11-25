@@ -52,6 +52,8 @@ import io.github.r1b2ns.stackaudit.Curl
 import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpPayload
 import io.github.r1b2ns.stackaudit.MetaPayload
+import io.github.r1b2ns.stackaudit.Scope
+import io.github.r1b2ns.stackaudit.Secrets
 import io.github.r1b2ns.stackaudit.StackAudit
 import io.github.r1b2ns.stackaudit.AnalyticsPayload
 import io.github.r1b2ns.stackaudit.DatabasePayload
@@ -149,8 +151,10 @@ private fun EventDetail(
     var event by remember(id) { mutableStateOf<AuditEvent?>(null) }
     var requestBody by remember(id) { mutableStateOf<String?>(null) }
     var responseBody by remember(id) { mutableStateOf<String?>(null) }
-    LaunchedEffect(id) {
-        val loaded = StackAudit.event(id)
+    var reveal by remember(id) { mutableStateOf(false) }
+    val canReveal = StackAudit.config?.secrets is Secrets.ShowAfterHandshake && StackAudit.allows(Scope.ReadSecrets)
+    LaunchedEffect(id, reveal) {
+        val loaded = StackAudit.event(id, revealSecrets = reveal)
         event = loaded
         val http = loaded?.payload as? HttpPayload
         val socket = loaded?.payload as? WebSocketPayload
@@ -160,6 +164,7 @@ private fun EventDetail(
     val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxSize()) {
         TopBar(title = "Details", leading = { Action("Back", onBack) }) {
+            if (canReveal) Action(if (reveal) "Mask" else "Reveal") { reveal = !reveal }
             val http = event?.payload as? HttpPayload
             if (http != null) {
                 Action("cURL") { clipboard.setText(AnnotatedString(Curl.from(http, requestBody))) }
@@ -259,9 +264,10 @@ private fun EventDetail(
 @Composable
 private fun FlagsScreen(onBack: () -> Unit) {
     val states by StackAudit.flags.states.collectAsState()
+    val canEdit = StackAudit.allows(Scope.Flags)
     Column(Modifier.fillMaxSize()) {
         TopBar(title = "Feature flags", leading = { Action("Back", onBack) }) {
-            Action("Reset all") { StackAudit.flags.clearOverrides() }
+            if (canEdit) Action("Reset all") { StackAudit.flags.clearOverrides() }
         }
         if (states.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -270,18 +276,25 @@ private fun FlagsScreen(onBack: () -> Unit) {
             return@Column
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(states.values.sortedBy { it.key }, key = { it.key }) { FlagRow(it) }
+            items(states.values.sortedBy { it.key }, key = { it.key }) { FlagRow(it, canEdit) }
         }
     }
 }
 
 @Composable
-private fun FlagRow(state: FlagState) {
+private fun FlagRow(
+    state: FlagState,
+    canEdit: Boolean,
+) {
     Column(Modifier.fillMaxWidth().background(palette.surface).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Label(state.key, weight = FontWeight.Medium, mono = true)
         Label("${state.effective.display} · ${state.source.name.lowercase()} · ${state.provider}", color = palette.muted, size = 12)
+        if (!canEdit) {
+            Spacer(Modifier.height(4.dp))
+            Label("Overrides need the flags scope", color = palette.muted, size = 12)
+        }
         Spacer(Modifier.height(8.dp))
-        when (val current = state.defaultValue) {
+        if (canEdit) when (val current = state.defaultValue) {
             is FlagValue.Bool ->
                 Row {
                     val effective = (state.effective as? FlagValue.Bool)?.value
