@@ -412,20 +412,22 @@ internal class AuditEngine(
 
     private fun writeDatabase(statement: DatabaseStatement) {
         val raw = statement.arguments.map { it?.let(::describe) }
-        val arguments = if (config.secrets.masksOnWrite) writeScrubber.sqlArguments(statement.sql, raw) else raw
+        val scrub = config.secrets.masksOnWrite
+        val arguments = if (scrub) writeScrubber.sqlArguments(statement.sql, raw) else raw
+        val sql = if (scrub) writeScrubber.sql(statement.sql) else statement.sql
         val payload =
             DatabasePayload(
                 database = statement.database,
-                sql = statement.sql,
+                sql = sql,
                 arguments = arguments.map(::limit),
                 rowsAffected = statement.rowsAffected,
                 error = statement.error,
             )
-        val compact = statement.sql.replace(Regex("\\s+"), " ").trim()
+        val compact = sql.replace(Regex("\\s+"), " ").trim()
         val title = "${statement.database}: " + if (compact.length > TITLE_SQL) compact.take(TITLE_SQL) + "…" else compact
         database.transaction {
             val seq = insert(statement.timestamp, statement.durationMs, Category.Database, statement.source, null, title, payload)
-            if (keepRaw) saveSecret(seq, payload.copy(arguments = raw.map(::limit)))
+            if (keepRaw) saveSecret(seq, payload.copy(sql = statement.sql, arguments = raw.map(::limit)))
         }
     }
 

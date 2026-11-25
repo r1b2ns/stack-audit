@@ -35,4 +35,38 @@ class StorageMaskingTest {
             scrubber.sqlArguments("UPDATE user SET name = ?, password = ? WHERE id = ?", listOf("ana", "hunter2", "7")),
         )
     }
+
+    @Test
+    fun masksLiteralsAssignedToSecretColumns() {
+        assertEquals(
+            "UPDATE user SET name = 'ana', password = '••••' WHERE id = 7",
+            scrubber.sql("UPDATE user SET name = 'ana', password = 'hunter2' WHERE id = 7"),
+        )
+        assertEquals("SELECT * FROM s WHERE token='••••5678'", scrubber.sql("SELECT * FROM s WHERE token='abcdefgh12345678'"))
+        assertEquals("SELECT * FROM u WHERE password = '••••' AND age > 3", scrubber.sql("SELECT * FROM u WHERE password = 1234 AND age > 3"))
+        assertEquals("SELECT * FROM u WHERE password = ?", scrubber.sql("SELECT * FROM u WHERE password = ?"))
+    }
+
+    @Test
+    fun masksLiteralsInsideInsertValues() {
+        assertEquals(
+            "INSERT INTO user (name, password, note) VALUES ('ana', '••••', 'a, b'), ('bia', '••••', 'it''s')",
+            scrubber.sql("INSERT INTO user (name, password, note) VALUES ('ana', 'hun,ter2', 'a, b'), ('bia', 'x''y', 'it''s')"),
+        )
+        assertEquals(
+            "insert or replace into `session` (`id`, `token`) values (1, '••••'), (2, ?)",
+            scrubber.sql("insert or replace into `session` (`id`, `token`) values (1, 'abc'), (2, ?)"),
+        )
+        assertEquals(
+            "INSERT INTO t (a, api_key) VALUES (lower('X'), '••••')",
+            scrubber.sql("INSERT INTO t (a, api_key) VALUES (lower('X'), 'shh')"),
+        )
+    }
+
+    @Test
+    fun ignoresSecretLookingTextInsideOtherLiterals() {
+        val sql = "INSERT INTO post (title, body) VALUES ('password = ''x''', 'token = 1'); SELECT * FROM post WHERE id = 3"
+        assertEquals(sql, scrubber.sql(sql))
+        assertEquals("SELECT 1", scrubber.sql("SELECT 1"))
+    }
 }

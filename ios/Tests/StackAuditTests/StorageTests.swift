@@ -59,4 +59,18 @@ final class StorageTests: XCTestCase {
         XCTAssertTrue(text.contains("memory.db: CREATE TABLE t(a INTEGER)"), text)
         XCTAssertTrue(text.contains("memory.db: INSERT INTO t VALUES (1)"), text)
     }
+
+    func testSqliteTraceMasksSecretLiterals() async throws {
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(":memory:", &db), SQLITE_OK)
+        XCTAssertTrue(StackAuditSQL.trace(db!, name: "secrets.db"))
+        let sql = "CREATE TABLE session(id INTEGER, token TEXT); INSERT INTO session (id, token) VALUES (1, 'abcdefgh12345678'); UPDATE session SET token = 'zzzz-secret' WHERE id = 1;"
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let text = try await log()
+        XCTAssertTrue(text.contains("INSERT INTO session (id, token) VALUES (1, '••••5678')"), text)
+        XCTAssertTrue(text.contains("UPDATE session SET token = '••••' WHERE id = 1"), text)
+        XCTAssertFalse(text.contains("abcdefgh12345678"))
+        XCTAssertFalse(text.contains("zzzz-secret"))
+    }
 }

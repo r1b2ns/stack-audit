@@ -330,6 +330,43 @@ class AuditEngineTest {
         }
 
     @Test
+    fun masksSecretLiteralsInRawSql() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordDatabase(DatabaseStatement("sqlite3", "app.db", "UPDATE user SET password = 'hunter2' WHERE id = 7", clock))
+            engine.flush()
+            val row = engine.summaries(Category.Database, null, 10).first().single()
+            assertEquals("app.db: UPDATE user SET password = '••••' WHERE id = 7", row.title)
+            assertEquals("UPDATE user SET password = '••••' WHERE id = 7", (engine.event(row.id)!!.payload as DatabasePayload).sql)
+        }
+
+    @Test
+    fun showAfterHandshakeKeepsTheRawSqlEncrypted() =
+        runBlocking<Unit> {
+            val engine =
+                engine {
+                    access = Access.Handshake("a".repeat(64))
+                    secrets = Secrets.ShowAfterHandshake()
+                }
+            val sql = "INSERT INTO session (id, token) VALUES (1, 'abc')"
+            engine.recordDatabase(DatabaseStatement("sqlite3", "app.db", sql, clock))
+            engine.flush()
+            val row = engine.summaries(Category.Database, null, 10).first().single()
+            assertEquals("INSERT INTO session (id, token) VALUES (1, '••••')", (engine.event(row.id)!!.payload as DatabasePayload).sql)
+            assertEquals(sql, (engine.rawPayload(row.id) as DatabasePayload).sql)
+        }
+
+    @Test
+    fun showModeKeepsRawSql() =
+        runBlocking<Unit> {
+            val engine = engine { secrets = Secrets.Show }
+            engine.recordDatabase(DatabaseStatement("sqlite3", "app.db", "SELECT * FROM u WHERE token = 'abc'", clock))
+            engine.flush()
+            val row = engine.summaries(Category.Database, null, 10).first().single()
+            assertEquals("SELECT * FROM u WHERE token = 'abc'", (engine.event(row.id)!!.payload as DatabasePayload).sql)
+        }
+
+    @Test
     fun showModeKeepsStorageValues() =
         runBlocking<Unit> {
             val engine = engine { secrets = Secrets.Show }

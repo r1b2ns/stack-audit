@@ -97,6 +97,8 @@ public class SecretScrubber(private val rules: SecretRules) {
         }
     }
 
+    public fun sql(sql: String): String = SqlLiterals.mask(sql, rules::isSecretField)
+
     private fun maskHeader(value: String): String {
         val space = value.indexOf(' ')
         val scheme = if (space > 0) value.substring(0, space) else ""
@@ -170,5 +172,147 @@ internal object SqlColumns {
             index = sql.indexOf('?', index + 1)
         }
         return result
+    }
+}
+
+internal object SqlLiterals {
+    private val insert = Regex("""insert\s+(?:or\s+\w+\s+)?into\s+[`"\[]?[\w.]+[`"\]]?\s*\(([^)]*)\)\s*values\s*""", RegexOption.IGNORE_CASE)
+    private val comparison =
+        Regex(
+            """[`"\[]?(\w+)[`"\]]?\s*(?:==|<>|!=|<=|>=|=|<|>|\blike\b|\bis\b)\s*(x'[0-9a-f]*'|'(?:[^']|'')*'|-?\d+(?:\.\d+)?)""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    fun mask(
+        sql: String,
+        isSecret: (String) -> Boolean,
+    ): String {
+        val ranges = mutableListOf<IntRange>()
+        insert.findAll(sql).forEach { match ->
+            val columns = match.groupValues[1].split(',').map { it.trim().trim('`', '"', '[', ']') }
+            tuples(sql, match.range.last + 1).forEach { items ->
+                items.forEachIndexed { index, range ->
+                    val column = columns.getOrNull(index)
+                    if (column != null && isSecret(column) && isLiteral(sql.substring(range.first, range.last + 1))) ranges += range
+                }
+            }
+        }
+        val strings = strings(sql)
+        comparison.findAll(sql).forEach { match ->
+            val literal = match.groups[2] ?: return@forEach
+            val insideString = strings.any { match.range.first > it.first && match.range.first <= it.last }
+            if (!insideString && isSecret(match.groupValues[1]) && ranges.none { it.first <= literal.range.first && literal.range.last <= it.last }) {
+                ranges += literal.range
+            }
+        }
+        if (ranges.isEmpty()) return sql
+        val out = StringBuilder()
+        var cursor = 0
+        ranges.sortedBy { it.first }.forEach { range ->
+            out.append(sql, cursor, range.first)
+            out.append(replacement(sql.substring(range.first, range.last + 1)))
+            cursor = range.last + 1
+        }
+        out.append(sql, cursor, sql.length)
+        return out.toString()
+    }
+
+    private fun replacement(literal: String): String =
+        if (literal.startsWith("'")) {
+            "'" + SecretScrubber.mask(literal.substring(1, literal.length - 1).replace("''", "'")) + "'"
+        } else {
+            "'" + SecretScrubber.MASK + "'"
+        }
+
+    private fun isLiteral(text: String): Boolean =
+        text.startsWith("'") || text.startsWith("x'", ignoreCase = true) || text.toDoubleOrNull() != null
+
+    private fun tuples(
+        sql: String,
+        start: Int,
+    ): List<List<IntRange>> {
+        val result = mutableListOf<List<IntRange>>()
+        var i = skipSpace(sql, start)
+        while (i < sql.length && sql[i] == '(') {
+            val items = mutableListOf<IntRange>()
+            var itemStart = i + 1
+            var depth = 0
+            var j = i + 1
+            var closed = false
+            while (j < sql.length) {
+                val c = sql[j]
+                when {
+                    c == '\'' -> j = endOfString(sql, j)
+                    c == '(' -> depth++
+                    c == ')' && depth > 0 -> depth--
+                    c == ',' && depth == 0 -> {
+                        items += trimmed(sql, itemStart, j)
+                        itemStart = j + 1
+                    }
+                    c == ')' -> {
+                        items += trimmed(sql, itemStart, j)
+                        closed = true
+                    }
+                }
+                if (closed) break
+                j++
+            }
+            if (!closed) break
+            result += items
+            i = skipSpace(sql, j + 1)
+            if (i < sql.length && sql[i] == ',') i = skipSpace(sql, i + 1) else break
+        }
+        return result
+    }
+
+    private fun strings(sql: String): List<IntRange> {
+        val result = mutableListOf<IntRange>()
+        var i = 0
+        while (i < sql.length) {
+            if (sql[i] == '\'') {
+                val end = endOfString(sql, i)
+                result += i..end
+                i = end + 1
+            } else {
+                i++
+            }
+        }
+        return result
+    }
+
+    private fun endOfString(
+        sql: String,
+        quote: Int,
+    ): Int {
+        var k = quote + 1
+        while (k < sql.length) {
+            if (sql[k] == '\'') {
+                if (k + 1 < sql.length && sql[k + 1] == '\'') k += 2 else return k
+            } else {
+                k++
+            }
+        }
+        return sql.length - 1
+    }
+
+    private fun trimmed(
+        sql: String,
+        from: Int,
+        until: Int,
+    ): IntRange {
+        var a = from
+        var b = until - 1
+        while (a <= b && sql[a].isWhitespace()) a++
+        while (b >= a && sql[b].isWhitespace()) b--
+        return a..b
+    }
+
+    private fun skipSpace(
+        sql: String,
+        from: Int,
+    ): Int {
+        var i = from
+        while (i < sql.length && sql[i].isWhitespace()) i++
+        return i
     }
 }
