@@ -13,6 +13,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.DefaultWebSocketSession
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readReason
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -105,6 +106,9 @@ internal class AuditedWebSocketSession(
                 }
                 val reason: CloseReason? = runCatching { delegate.closeReason.await() }.getOrNull()
                 tap.record(WebSocketKind.Closed, code = reason?.code?.toInt(), reason = reason?.message)
+            } catch (cancelled: CancellationException) {
+                tap.record(WebSocketKind.Closed)
+                throw cancelled
             } catch (error: Throwable) {
                 tap.record(WebSocketKind.Failed, error = (error::class.simpleName ?: "Error") + (error.message?.let { ": $it" } ?: ""))
                 throw error

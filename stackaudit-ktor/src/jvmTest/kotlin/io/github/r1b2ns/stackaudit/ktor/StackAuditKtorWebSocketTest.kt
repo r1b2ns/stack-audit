@@ -78,6 +78,20 @@ class StackAuditKtorWebSocketTest {
         }
 
     @Test
+    fun leavingTheBlockIsAClosureNotAFailure() =
+        runBlocking {
+            val recorder = FakeRecorder()
+            val client = HttpClient(CIO) { install(WebSockets) }
+            client.auditedWebSocket("ws://127.0.0.1:$port/echo", recorder = recorder) {
+                send(Frame.Text("hi"))
+                incoming.receive()
+            }
+            client.close()
+            val kinds = recorder.frames.map { it.kind }
+            assertTrue(WebSocketKind.Failed !in kinds, kinds.toString())
+        }
+
+    @Test
     fun returnsTheSameSessionWhenNotCapturing() =
         runBlocking {
             val recorder = FakeRecorder(isCapturingWebSockets = false)
