@@ -23,6 +23,7 @@ final class StorageTests: XCTestCase {
         watcher.start()
         defaults.set("dark", forKey: "theme")
         defaults.set("abcdefghijkl9999", forKey: "access_token")
+        defaults.set(true, forKey: "com.apple.something")
         defaults.removeObject(forKey: "theme")
         watcher.check()
         watcher.stop()
@@ -33,6 +34,7 @@ final class StorageTests: XCTestCase {
         XCTAssertTrue(text.contains("test-suite remove theme"), text)
         XCTAssertTrue(text.contains("••••9999"), text)
         XCTAssertFalse(text.contains("abcdefghijkl9999"))
+        XCTAssertFalse(text.contains("com.apple.something"))
     }
 
     func testDescribeFormatsValues() {

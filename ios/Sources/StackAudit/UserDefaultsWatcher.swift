@@ -9,10 +9,20 @@ public final class UserDefaultsWatcher {
     private var snapshot: [String: String] = [:]
     private var observer: NSObjectProtocol?
 
-    public init(defaults: UserDefaults = .standard, name: String = "standard", domain: String? = Bundle.main.bundleIdentifier) {
+    private let ignoredPrefixes: [String]
+
+    public static let systemPrefixes = ["com.apple.", "Apple", "NS", "AK", "WebKit", "PK", "INNext"]
+
+    public init(
+        defaults: UserDefaults = .standard,
+        name: String = "standard",
+        domain: String? = Bundle.main.bundleIdentifier,
+        ignoredPrefixes: [String] = UserDefaultsWatcher.systemPrefixes
+    ) {
         self.defaults = defaults
         self.name = name
         self.domain = domain
+        self.ignoredPrefixes = ignoredPrefixes
     }
 
     deinit {
@@ -66,7 +76,7 @@ public final class UserDefaultsWatcher {
     private func current() -> [String: String] {
         let values = domain.flatMap { defaults.persistentDomain(forName: $0) } ?? defaults.dictionaryRepresentation()
         var result: [String: String] = [:]
-        for (key, value) in values {
+        for (key, value) in values where !ignoredPrefixes.contains(where: { key.hasPrefix($0) }) {
             result[key] = Self.describe(value)
             types[key] = String(describing: type(of: value))
         }
