@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":stackaudit-ktor"))
     implementation(project(":stackaudit-ui"))
     implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.cio)
     implementation(libs.androidx.activity.compose)
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui)

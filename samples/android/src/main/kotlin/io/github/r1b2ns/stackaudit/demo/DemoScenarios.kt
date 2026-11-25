@@ -5,7 +5,21 @@ import io.github.r1b2ns.stackaudit.okhttp.audited
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.request.get
+import io.github.r1b2ns.stackaudit.ktor.auditedWebSocket
+import io.github.r1b2ns.stackaudit.okhttp.newAuditedWebSocket
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.statement.bodyAsText
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.close
+import io.ktor.websocket.readText
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okio.ByteString
+import okio.ByteString.Companion.toByteString
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -13,7 +27,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-enum class Client { OkHttp, Ktor }
+enum class Client { OkHttp, Ktor, OkHttpWebSocket, KtorWebSocket }
 
 data class Scenario(
     val title: String,
@@ -26,6 +40,7 @@ data class Scenario(
 
 object DemoScenarios {
     const val BIN = "https://httpbin.org"
+    const val ECHO = "wss://echo.websocket.org/"
 
     val all: List<Scenario> =
         listOf(
@@ -46,14 +61,22 @@ object DemoScenarios {
             Scenario("Image", Client.OkHttp, "GET", "$BIN/image/png"),
             Scenario("Unknown host", Client.OkHttp, "GET", "https://does-not-exist.stackaudit.invalid/"),
             Scenario("Ktor GET", Client.Ktor, "GET", "$BIN/get?source=ktor"),
+            Scenario("OkHttp WebSocket echo", Client.OkHttpWebSocket, "WS", "$ECHO?token=abcdefghijklmnop"),
+            Scenario("Ktor WebSocket echo", Client.KtorWebSocket, "WS", ECHO),
         )
 }
+
+const val MESSAGE = """{"type":"chat","text":"hello","password":"hunter2"}"""
 
 class DemoRunner {
     private val okHttp = OkHttpClient.Builder().audited().build()
     private val ktor =
         HttpClient(Android) {
             install(StackAuditKtor)
+        }
+    private val ktorSockets =
+        HttpClient(CIO) {
+            install(WebSockets)
         }
 
     suspend fun run(scenario: Scenario): String =
@@ -64,8 +87,46 @@ class DemoRunner {
                     val response = ktor.get(scenario.url)
                     "${response.status.value} · ${response.bodyAsText().length} chars"
                 }
+                Client.OkHttpWebSocket -> okHttpSocket(scenario.url)
+                Client.KtorWebSocket -> {
+                    var echoed = ""
+                    ktorSockets.auditedWebSocket(scenario.url) {
+                        incoming.receive()
+                        send(Frame.Text(MESSAGE))
+                        echoed = (incoming.receive() as Frame.Text).readText()
+                        close(CloseReason(CloseReason.Codes.NORMAL, "done"))
+                    }
+                    "echo · ${echoed.length} chars"
+                }
             }
         }.getOrElse { "Failed: ${it::class.simpleName}: ${it.message}" }
+
+    private suspend fun okHttpSocket(url: String): String =
+        withContext(Dispatchers.IO) {
+            val replies = CountDownLatch(2)
+            val listener =
+                object : WebSocketListener() {
+                    override fun onMessage(
+                        webSocket: WebSocket,
+                        text: String,
+                    ) {
+                        replies.countDown()
+                    }
+
+                    override fun onMessage(
+                        webSocket: WebSocket,
+                        bytes: ByteString,
+                    ) {
+                        replies.countDown()
+                    }
+                }
+            val socket = okHttp.newAuditedWebSocket(Request.Builder().url(url).build(), listener)
+            socket.send(MESSAGE)
+            socket.send(byteArrayOf(1, 2, 3).toByteString())
+            val done = replies.await(10, TimeUnit.SECONDS)
+            socket.close(1000, "done")
+            if (done) "echo received" else "Timed out"
+        }
 
     private suspend fun okHttp(scenario: Scenario): String =
         withContext(Dispatchers.IO) {

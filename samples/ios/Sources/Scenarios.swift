@@ -1,10 +1,12 @@
 import Alamofire
 import Foundation
+import StackAudit
 
 enum DemoClient: String, CaseIterable {
     case urlSession = "URLSession"
     case alamofire = "Alamofire"
     case pinned = "Alamofire + pinning"
+    case webSocket = "URLSession WebSocket"
 }
 
 struct Scenario: Identifiable, Hashable {
@@ -48,6 +50,7 @@ enum Scenarios {
             headers: ["Content-Type": "application/json"]
         ),
         Scenario(title: "Pinning rejects (expected failure)", client: .pinned, method: "GET", url: "\(bin)/get?source=pinning"),
+        Scenario(title: "WebSocket echo", client: .webSocket, method: "WS", url: "wss://echo.websocket.org/?token=abcdefghijklmnop"),
     ]
 }
 
@@ -76,6 +79,24 @@ final class DemoRunner {
             return await run(alamofire, request)
         case .pinned:
             return await run(pinned, request)
+        case .webSocket:
+            return await echo(url)
+        }
+    }
+
+    private func echo(_ url: URL) async -> String {
+        let socket = session.auditedWebSocketTask(with: url)
+        socket.resume()
+        defer { socket.cancel(with: .normalClosure, reason: nil) }
+        do {
+            _ = try await socket.receive()
+            try await socket.send(.string(#"{"type":"chat","text":"hello","password":"hunter2"}"#))
+            try await socket.send(.data(Data([1, 2, 3])))
+            _ = try await socket.receive()
+            _ = try await socket.receive()
+            return "echo received"
+        } catch {
+            return "Failed: \(error.localizedDescription)"
         }
     }
 
