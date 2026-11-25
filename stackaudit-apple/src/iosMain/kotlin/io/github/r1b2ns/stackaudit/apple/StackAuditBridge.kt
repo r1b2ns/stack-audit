@@ -1,6 +1,8 @@
 package io.github.r1b2ns.stackaudit.apple
 
 import io.github.r1b2ns.stackaudit.Access
+import io.github.r1b2ns.stackaudit.BlobCipher
+import io.github.r1b2ns.stackaudit.StackAuditIos
 import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpExchange
 import io.github.r1b2ns.stackaudit.Secrets
@@ -11,6 +13,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData
+import platform.Foundation.create
 import platform.posix.memcpy
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,8 +65,12 @@ public object StackAuditBridge {
         }
 
     @Throws(IllegalArgumentException::class)
-    public fun start(options: BridgeOptions) {
+    public fun start(
+        options: BridgeOptions,
+        cipher: DataCipher?,
+    ) {
         val config = config(options)
+        StackAuditIos.cipher = cipher?.let(::DataCipherAdapter)
         StackAuditUi.install()
         StackAudit.start(config)
     }
@@ -110,6 +117,28 @@ public object StackAuditBridge {
 
     public fun show(): Boolean = StackAudit.show()
 }
+
+public interface DataCipher {
+    public fun seal(data: NSData): NSData
+
+    public fun open(data: NSData): NSData
+}
+
+internal class DataCipherAdapter(
+    private val cipher: DataCipher,
+) : BlobCipher {
+    override fun encrypt(plain: ByteArray): ByteArray = cipher.seal(plain.toNSData()).toByteArray()
+
+    override fun decrypt(data: ByteArray): ByteArray = cipher.open(data.toNSData()).toByteArray()
+}
+
+@OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
+internal fun ByteArray.toNSData(): NSData =
+    if (isEmpty()) {
+        NSData()
+    } else {
+        usePinned { NSData.create(bytes = it.addressOf(0), length = size.toULong()) }
+    }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun NSData.toByteArray(): ByteArray {

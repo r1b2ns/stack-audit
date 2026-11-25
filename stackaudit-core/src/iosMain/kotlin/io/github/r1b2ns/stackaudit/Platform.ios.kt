@@ -35,7 +35,11 @@ internal actual fun createPlatformDriver(): SqlDriver {
     return driver
 }
 
-internal actual fun platformCipher(): BlobCipher = PlainCipher
+public object StackAuditIos {
+    public var cipher: BlobCipher? = null
+}
+
+internal actual fun platformCipher(): BlobCipher = StackAuditIos.cipher ?: PlainCipher
 
 @OptIn(ExperimentalNativeApi::class)
 internal actual fun isDebuggableBuild(): Boolean = Platform.isDebugBinary

@@ -1,5 +1,6 @@
 import Foundation
 import StackAuditKit
+import CryptoKit
 import XCTest
 @testable import StackAudit
 
@@ -148,5 +149,29 @@ final class StackAuditTests: XCTestCase {
         XCTAssertEqual(options.allowed, ["cookie"])
         XCTAssertEqual(options.maxBodySize, 10)
         XCTAssertEqual(options.access, .hidden)
+    }
+}
+
+final class KeychainCipherTests: XCTestCase {
+    func testSealAndOpenRoundTrip() {
+        let cipher = KeychainCipher(key: .init(size: .bits256))
+        let plain = Data("secret body".utf8)
+        let sealed = cipher.seal(data: plain)
+        XCTAssertNotEqual(sealed, plain)
+        XCTAssertEqual(cipher.open(data: sealed), plain)
+    }
+
+    func testOpenRejectsTamperedData() {
+        let cipher = KeychainCipher(key: .init(size: .bits256))
+        var sealed = cipher.seal(data: Data("abc".utf8))
+        sealed[sealed.count - 1] ^= 0xFF
+        XCTAssertEqual(cipher.open(data: sealed), Data())
+    }
+
+    func testKeychainKeyIsReused() throws {
+        try XCTSkipUnless(KeychainCipher.isKeychainAvailable, "keychain needs a host app entitlement")
+        let first = KeychainCipher(service: "io.github.r1b2ns.stackaudit.tests", account: "k")
+        let second = KeychainCipher(service: "io.github.r1b2ns.stackaudit.tests", account: "k")
+        XCTAssertEqual(second.open(data: first.seal(data: Data("x".utf8))), Data("x".utf8))
     }
 }

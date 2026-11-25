@@ -51,7 +51,7 @@ public enum StackAudit {
 
     public static func start(_ configuration: Configuration) throws {
         do {
-            try StackAuditBridge.shared.start(options: options(from: configuration))
+            try StackAuditBridge.shared.start(options: options(from: configuration), cipher: KeychainCipher())
         } catch {
             throw ConfigurationError.invalid(error.localizedDescription)
         }
