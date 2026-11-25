@@ -42,7 +42,10 @@ public class SecretRules internal constructor(
         internal fun build(): SecretRules = SecretRules(headers.toSet(), fields.toSet(), queryParams.toSet(), matcher)
     }
 
-    internal fun isSecretHeader(name: String): Boolean = normalize(name) in headers || matcher?.invoke(name.lowercase()) == true
+    internal fun isSecretHeader(name: String): Boolean {
+        val key = normalize(name)
+        return key in headers || key in fields || matcher?.invoke(name.lowercase()) == true
+    }
 
     internal fun isSecretField(name: String): Boolean {
         val key = normalize(name)
