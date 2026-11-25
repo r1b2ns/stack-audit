@@ -3,6 +3,8 @@ package io.github.r1b2ns.stackaudit.apple
 import io.github.r1b2ns.stackaudit.Access
 import io.github.r1b2ns.stackaudit.BlobCipher
 import io.github.r1b2ns.stackaudit.StackAuditIos
+import io.github.r1b2ns.stackaudit.WebSocketFrame
+import io.github.r1b2ns.stackaudit.WebSocketKind
 import io.github.r1b2ns.stackaudit.Header
 import io.github.r1b2ns.stackaudit.HttpExchange
 import io.github.r1b2ns.stackaudit.Secrets
@@ -111,6 +113,37 @@ public object StackAuditBridge {
                 error = error,
                 requestBodySize = requestBodySize.takeIf { it >= 0 },
                 responseBodySize = responseBodySize.takeIf { it >= 0 },
+            ),
+        )
+    }
+
+    public val isCapturingWebSockets: Boolean get() = StackAudit.isCapturingWebSockets
+
+    public fun recordWebSocket(
+        source: String,
+        connectionId: String,
+        url: String,
+        kind: String,
+        data: NSData?,
+        isText: Boolean,
+        code: Int,
+        reason: String?,
+        error: String?,
+        timestampMs: Long,
+    ) {
+        val parsed = WebSocketKind.entries.firstOrNull { it.name.equals(kind, ignoreCase = true) } ?: return
+        StackAudit.record(
+            WebSocketFrame(
+                source = source,
+                connectionId = connectionId,
+                url = url,
+                kind = parsed,
+                timestamp = timestampMs,
+                data = data?.toByteArray()?.takeIf { it.size <= StackAudit.maxBodySize },
+                isText = isText,
+                code = code.takeIf { it > 0 },
+                reason = reason,
+                error = error,
             ),
         )
     }

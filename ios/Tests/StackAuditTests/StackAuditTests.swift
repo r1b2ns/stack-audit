@@ -29,13 +29,8 @@ final class MockURLProtocol: URLProtocol {
 }
 
 final class StackAuditTests: XCTestCase {
-    private static var started = false
-
     override func setUp() async throws {
-        if !Self.started {
-            Self.started = true
-            StackAudit.start { $0.shakeToOpen = false }
-        }
+        TestSupport.startOnce()
         StackAuditURLProtocol.innerProtocolClasses = [MockURLProtocol.self]
         MockURLProtocol.received = []
         MockURLProtocol.handler = { request in
