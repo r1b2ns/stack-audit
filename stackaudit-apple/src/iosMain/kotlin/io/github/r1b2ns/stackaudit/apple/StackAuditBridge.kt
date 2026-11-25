@@ -7,6 +7,7 @@ import io.github.r1b2ns.stackaudit.AuditedFlags
 import io.github.r1b2ns.stackaudit.DatabaseStatement
 import io.github.r1b2ns.stackaudit.FlagProvider
 import io.github.r1b2ns.stackaudit.FlagValue
+import io.github.r1b2ns.stackaudit.HandshakeResult
 import io.github.r1b2ns.stackaudit.TrackingPlan
 import io.github.r1b2ns.stackaudit.StorageChange
 import io.github.r1b2ns.stackaudit.StorageOperation
@@ -37,6 +38,7 @@ public class BridgeOptions {
     public var allowed: List<String> = emptyList()
     public var access: AccessMode = AccessMode.Open
     public var publicKey: String? = null
+    public var appId: String? = null
     public var sessionTtlSeconds: Long = 1800
     public var retentionSeconds: Long = 7 * 24 * 3600
     public var maxBodySize: Long = 1024L * 1024L
@@ -66,6 +68,7 @@ public object StackAuditBridge {
                         Access.Handshake(
                             requireNotNull(options.publicKey) { "StackAudit: access .handshake requires a public key." },
                             options.sessionTtlSeconds.seconds,
+                            options.appId,
                         )
                 }
             retention = options.retentionSeconds.seconds
@@ -221,6 +224,16 @@ public object StackAuditBridge {
         provider: String,
         lookup: (String) -> FlagValue?,
     ): AuditedFlags = StackAudit.flags.wrap(FlagProvider { lookup(it) }, provider)
+
+    public fun handshake(token: String): String? =
+        when (val result = StackAudit.handshake(token)) {
+            is HandshakeResult.Accepted -> null
+            is HandshakeResult.Rejected -> result.reason
+        }
+
+    public fun handleLink(url: String): Boolean = StackAudit.handleLink(url)
+
+    public val deviceId: String? get() = StackAudit.deviceId
 
     public fun show(): Boolean = StackAudit.show()
 }

@@ -10,7 +10,7 @@ public enum StackAudit {
 
     public enum Access: Equatable {
         case open
-        case handshake(publicKey: String, sessionTTL: TimeInterval = 1800)
+        case handshake(publicKey: String, sessionTTL: TimeInterval = 1800, appId: String? = nil)
         case hidden
     }
 
@@ -76,6 +76,25 @@ public enum StackAudit {
         watchers[name] = watcher
     }
 
+    public enum HandshakeOutcome: Equatable {
+        case accepted
+        case rejected(String)
+    }
+
+    @discardableResult
+    public static func handshake(token: String) -> HandshakeOutcome {
+        StackAuditBridge.shared.handshake(token: token).map(HandshakeOutcome.rejected) ?? .accepted
+    }
+
+    @discardableResult
+    public static func handle(url: URL) -> Bool {
+        StackAuditBridge.shared.handleLink(url: url.absoluteString)
+    }
+
+    public static var deviceId: String? {
+        StackAuditBridge.shared.deviceId
+    }
+
     @discardableResult
     public static func show() -> Bool {
         StackAuditBridge.shared.show()
@@ -100,10 +119,11 @@ public enum StackAudit {
         switch configuration.access {
         case .open:
             options.access = .open
-        case let .handshake(publicKey, ttl):
+        case let .handshake(publicKey, ttl, appId):
             options.access = .handshake
             options.publicKey = publicKey
             options.sessionTtlSeconds = Int64(ttl)
+            options.appId = appId
         case .hidden:
             options.access = .hidden
         }
