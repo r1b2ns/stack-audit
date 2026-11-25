@@ -18,10 +18,12 @@ kotlin {
         androidMain.dependencies {
             api(project(":stackaudit-core"))
             api(libs.okhttp)
+            compileOnly(libs.androidx.room.runtime)
         }
         getByName("androidHostTest").dependencies {
             implementation(kotlin("test"))
             implementation(libs.okhttp.mockwebserver)
+            implementation(libs.androidx.room.runtime)
         }
     }
 }

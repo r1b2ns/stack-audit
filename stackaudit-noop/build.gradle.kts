@@ -31,6 +31,7 @@ kotlin {
         }
         androidMain.dependencies {
             compileOnly(libs.okhttp)
+            compileOnly(libs.androidx.room.runtime)
         }
     }
 }
