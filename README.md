@@ -21,6 +21,12 @@
   <img src="docs/media/viewer.gif" alt="The StackAudit viewer: request list, analytics checked against a tracking plan, search, a request with masked secrets and a feature flag override" width="320">
 </p>
 
+<p align="center">
+  <img src="docs/media/android-request-list.png" alt="StackAudit viewer on Android: request list" width="600">
+  <img src="docs/media/android-request-detail.png" alt="StackAudit viewer on Android: request detail with masked secrets" width="600">
+  <img src="docs/media/android-flags-tab.png" alt="StackAudit viewer on Android: feature flags tab" width="600">
+</p>
+
 StackAudit is a free, open-source library that records what your app does at runtime and lets you browse it on the device. Shake the phone and see every request, WebSocket frame, stored value, SQL statement, analytics event and feature flag, on Android and iOS, from the same tool.
 
 ```kotlin
