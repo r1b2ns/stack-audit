@@ -73,9 +73,9 @@ The libraries are published to Maven Central under `io.github.r1b2ns`.
 
 ```kotlin
 dependencies {
-    debugImplementation("io.github.r1b2ns:stackaudit-android:0.2.0")
-    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.2.0")
-    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.2.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-android:0.4.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.4.0")
+    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.4.0")
 }
 ```
 
@@ -96,7 +96,7 @@ The plugin adds the StackAudit interceptor to every `OkHttpClient.Builder().buil
 
 ```kotlin
 plugins {
-    id("io.github.r1b2ns.stackaudit") version "0.2.0"
+    id("io.github.r1b2ns.stackaudit") version "0.4.0"
 }
 
 stackAudit {
@@ -116,7 +116,7 @@ https://github.com/r1b2ns/stack-audit
 Or add it to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.3.0")
+.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.4.0")
 ```
 
 The package requires iOS 15 or later.
@@ -177,11 +177,11 @@ Add the artifacts to the shared module and the no-op twins to release builds of 
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.r1b2ns:stackaudit-core:0.2.0")
-    implementation("io.github.r1b2ns:stackaudit-ktor:0.2.0")
-    implementation("io.github.r1b2ns:stackaudit-sqldelight:0.2.0")
-    implementation("io.github.r1b2ns:stackaudit-settings:0.2.0")
-    implementation("io.github.r1b2ns:stackaudit-ui:0.2.0")
+    implementation("io.github.r1b2ns:stackaudit-core:0.4.0")
+    implementation("io.github.r1b2ns:stackaudit-ktor:0.4.0")
+    implementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.0")
+    implementation("io.github.r1b2ns:stackaudit-settings:0.4.0")
+    implementation("io.github.r1b2ns:stackaudit-ui:0.4.0")
 }
 ```
 
