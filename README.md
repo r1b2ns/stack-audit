@@ -34,7 +34,7 @@ StackAudit is a free, open-source library that records what your app does at run
 StackAudit.start()
 ```
 
-That is the whole setup on Android. On iOS, URLSession traffic is captured with no extra code.
+On iOS, that one call also captures URLSession traffic with no extra code. On Android, you then wire up each source you want recorded, such as `OkHttpClient.Builder().audited()`. See [Quick start](#android).
 
 ## Why StackAudit
 
@@ -71,13 +71,32 @@ That is the whole setup on Android. On iOS, URLSession traffic is captured with 
 
 The libraries are published to Maven Central under `io.github.r1b2ns`.
 
+Requirements:
+
+- `minSdk` 24 or later and `compileSdk` 36
+- JDK 17 (`kotlin { jvmToolchain(17) }`)
+- Kotlin 2.4 or later (the libraries are built with Kotlin 2.4.21)
+- `android.permission.INTERNET` in the app manifest, if you capture network traffic
+
 ```kotlin
 dependencies {
     debugImplementation("io.github.r1b2ns:stackaudit-android:0.4.0")
     debugImplementation("io.github.r1b2ns:stackaudit-ui:0.4.0")
     releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.4.0")
+
+    debugImplementation("io.github.r1b2ns:stackaudit-ktor:0.4.0")
+    releaseImplementation("io.github.r1b2ns:stackaudit-ktor-noop:0.4.0")
+
+    debugImplementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.0")
+    releaseImplementation("io.github.r1b2ns:stackaudit-sqldelight-noop:0.4.0")
 }
 ```
+
+The first block is the minimum. Add the Ktor and SQLDelight pairs only if your app uses them. Every capture artifact in `debugImplementation` needs its no-op twin in `releaseImplementation`, or release builds fail to compile.
+
+`stackaudit-ui` has no no-op twin. Keep any reference to `StackAuditUi` (for example `StackAuditUi.shakeToOpen`) in `src/debug`, or the release build will not compile. `StackAudit.show()` lives in the core API, so it is safe to call from `src/main`.
+
+`stackaudit-android` exposes OkHttp 5 (`com.squareup.okhttp3:okhttp:5.3.2`) as an `api` dependency. Gradle resolves the higher version, so an app on OkHttp 4 is moved to OkHttp 5 in builds that include it. Room is `compileOnly`, so to use `audited()` on Room your app must already depend on `androidx.room:room-runtime`.
 
 | Artifact | What it adds | No-op twin |
 |---|---|---|
@@ -92,10 +111,16 @@ The no-op twins keep the same API and do nothing, so release builds carry no cap
 
 #### Gradle plugin (optional)
 
-The plugin adds the StackAudit interceptor to every `OkHttpClient.Builder().build()` call in your app and its dependencies at build time.
+> [!NOTE]
+> The Gradle plugin is not on the Gradle Plugin Portal yet, so `id("io.github.r1b2ns.stackaudit")` will not resolve. Until it is, capture OkHttp with `OkHttpClient.Builder().audited()` or `addInterceptor(StackAuditInterceptor())`.
+
+The plugin adds the StackAudit interceptor to every OkHttp client in your app and its dependencies, with no code changes. At build time it rewrites each `OkHttpClient.Builder().build()` call to go through StackAudit (an ASM bytecode transform from the Android Gradle Plugin's instrumentation API).
+
+Apply it in the app module, next to `com.android.application`. It does nothing in library modules, because the app module already transforms the classes of its dependencies.
 
 ```kotlin
 plugins {
+    id("com.android.application")
     id("io.github.r1b2ns.stackaudit") version "0.4.0"
 }
 
@@ -104,6 +129,13 @@ stackAudit {
     skipBuildTypes.set(listOf("release"))
 }
 ```
+
+| Option | Default | What it does |
+|---|---|---|
+| `okhttp` | `true` | Rewrites `OkHttpClient.Builder().build()` calls |
+| `skipBuildTypes` | none | Build types left untouched |
+
+A variant is rewritten only if `stackaudit-android` or `stackaudit-noop` is on its classpath. Without either, the plugin changes nothing. In release builds with `stackaudit-noop`, the rewritten calls do nothing; add `"release"` to `skipBuildTypes` to leave release bytecode untouched anyway. The plugin is built against Android Gradle Plugin 9.5.
 
 ### iOS
 
@@ -148,9 +180,11 @@ class App : Application() {
 }
 ```
 
-With `stackaudit-ui` on the classpath, the viewer installs itself at startup. Shake the device or call `StackAudit.show()` to open it. To keep only the manual call, set `StackAuditUi.shakeToOpen = false`.
+Register the class in `AndroidManifest.xml` with `android:name=".App"` on `<application>`. StackAudit gets the application context by itself through `androidx.startup`, so no other manifest entry is needed.
 
-Wire up the sources you use:
+With `stackaudit-ui` on the classpath, the viewer installs itself at startup. Shake the device or call `StackAudit.show()` to open it. To keep only the manual call, set `StackAuditUi.shakeToOpen = false` from a debug-only source set (see [Installation](#android-and-kmp)).
+
+On Android, `StackAudit.start()` does not capture anything by itself. Wire up the sources you use (the Gradle plugin can do it for OkHttp):
 
 ```kotlin
 val okHttp = OkHttpClient.Builder().audited().build()
