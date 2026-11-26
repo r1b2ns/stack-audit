@@ -343,4 +343,35 @@ internal object Icons {
                 lineTo(12.5f, 16f)
             }
         }
+
+    val List =
+        icon("list") {
+            stroke(1.9f) {
+                moveTo(8.5f, 6f)
+                lineTo(20.5f, 6f)
+                moveTo(8.5f, 12f)
+                lineTo(20.5f, 12f)
+                moveTo(8.5f, 18f)
+                lineTo(20.5f, 18f)
+                moveTo(4f, 6f)
+                lineTo(4.01f, 6f)
+                moveTo(4f, 12f)
+                lineTo(4.01f, 12f)
+                moveTo(4f, 18f)
+                lineTo(4.01f, 18f)
+            }
+        }
+
+    val Drive =
+        icon("drive") {
+            stroke(1.8f) {
+                roundRect(3f, 13f, 21f, 20f, 2f)
+                moveTo(5f, 13f)
+                lineTo(7.5f, 5f)
+                lineTo(16.5f, 5f)
+                lineTo(19f, 13f)
+                moveTo(16.5f, 16.5f)
+                lineTo(16.51f, 16.5f)
+            }
+        }
 }

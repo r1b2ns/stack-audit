@@ -97,6 +97,26 @@ public object StackAudit :
 
     public suspend fun clear() {}
 
+    public val recording: Flow<Set<Category>> = flowOf(emptySet())
+
+    public fun setRecording(
+        category: Category,
+        enabled: Boolean,
+    ) {
+        category.hashCode()
+        enabled.hashCode()
+    }
+
+    public val storageLimit: Flow<Long> = flowOf(0L)
+
+    public fun setStorageLimit(bytes: Long) {
+        bytes.hashCode()
+    }
+
+    public suspend fun delete(ids: Collection<String>) {
+        ids.hashCode()
+    }
+
     public suspend fun stats(): AuditStats = AuditStats(0, 0, null)
 
     public fun recordExport(

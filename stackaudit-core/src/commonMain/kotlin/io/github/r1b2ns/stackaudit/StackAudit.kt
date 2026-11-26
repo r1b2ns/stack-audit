@@ -41,19 +41,19 @@ public object StackAudit :
 
     public val deviceId: String? get() = engine.value?.deviceId
 
-    override val isCapturingAnalytics: Boolean get() = engine.value?.config?.categories?.contains(Category.Analytics) == true
+    override val isCapturingAnalytics: Boolean get() = engine.value?.isRecording(Category.Analytics) == true
 
-    override val isCapturingFlags: Boolean get() = engine.value?.config?.categories?.contains(Category.Flag) == true
+    override val isCapturingFlags: Boolean get() = engine.value?.isRecording(Category.Flag) == true
 
     public val config: StackAuditConfig? get() = engine.value?.config
 
-    override val isCapturing: Boolean get() = engine.value?.config?.categories?.contains(Category.Http) == true
+    override val isCapturing: Boolean get() = engine.value?.isRecording(Category.Http) == true
 
-    override val isCapturingWebSockets: Boolean get() = engine.value?.config?.categories?.contains(Category.WebSocket) == true
+    override val isCapturingWebSockets: Boolean get() = engine.value?.isRecording(Category.WebSocket) == true
 
-    override val isCapturingStorage: Boolean get() = engine.value?.config?.categories?.contains(Category.Storage) == true
+    override val isCapturingStorage: Boolean get() = engine.value?.isRecording(Category.Storage) == true
 
-    override val isCapturingDatabase: Boolean get() = engine.value?.config?.categories?.contains(Category.Database) == true
+    override val isCapturingDatabase: Boolean get() = engine.value?.isRecording(Category.Database) == true
 
     override val maxBodySize: Long get() = engine.value?.config?.maxBodySize ?: 0
 
@@ -229,6 +229,27 @@ public object StackAudit :
 
     public suspend fun clear() {
         engine.value?.clear()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    public val recording: Flow<Set<Category>> = engine.flatMapLatest { it?.recording ?: flowOf(emptySet()) }
+
+    public fun setRecording(
+        category: Category,
+        enabled: Boolean,
+    ) {
+        engine.value?.setRecording(category, enabled)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    public val storageLimit: Flow<Long> = engine.flatMapLatest { it?.storageLimit ?: flowOf(0L) }
+
+    public fun setStorageLimit(bytes: Long) {
+        engine.value?.setStorageLimit(bytes)
+    }
+
+    public suspend fun delete(ids: Collection<String>) {
+        engine.value?.delete(ids)
     }
 
     public suspend fun stats(): AuditStats = engine.value?.stats() ?: AuditStats(0, 0, null)

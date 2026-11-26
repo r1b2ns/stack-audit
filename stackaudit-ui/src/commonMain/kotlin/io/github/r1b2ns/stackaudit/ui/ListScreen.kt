@@ -46,21 +46,22 @@ internal fun AuditListScreen() {
     val searched = all.filter { Presentation.matchesSearch(it, query) }
     val visible = searched.filter(filter::matches)
     val days = retentionDays()
-    val exportBatch = { navigator.present(SheetRoute.Batch(visible, all, filter.title)) }
+    val requests = all.filter { it.category in RequestCategories }
+    val exportBatch = { navigator.present(SheetRoute.Batch(visible, requests, filter.title)) }
+    val deleting = segment == Segment.Events && visible.isNotEmpty()
     Column(Modifier.fillMaxSize()) {
         NavBar(
-            title = "Audit",
+            title = "Requests",
             large = true,
             leading = { BarText("Close", onClick = navigator.onClose) },
             trailing = {
-                BarIcon(Icons.Flag) { navigator.push(Route.Flags) }
-                BarIcon(Icons.Share, enabled = all.isNotEmpty(), onClick = exportBatch)
-                BarIcon(Icons.Gear) { navigator.push(Route.Retention) }
+                BarIcon(Icons.Trash, enabled = deleting) { navigator.confirmDelete(visible) }
+                BarIcon(Icons.Share, enabled = requests.isNotEmpty(), onClick = exportBatch)
             },
         )
         SearchBar(query, "Search host or path", { navigator.query = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 40.dp)) {
-            item("banner") { Banner(days) { navigator.push(Route.Retention) } }
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+            item("banner") { Banner(days) { navigator.select(Tab.Settings) } }
             item("tiles") { Tiles(Presentation.today(all, time), Modifier.padding(top = 14.dp)) }
             item("segment") {
                 Segmented(Segment.entries, segment, Segment::title, { navigator.segment = it }, Modifier.padding(top = 18.dp))
@@ -70,13 +71,67 @@ internal fun AuditListScreen() {
                     item("chips") {
                         FlowChips(Filter.entries, filter, Filter::title, { navigator.filter = it }, Modifier.padding(top = 12.dp))
                     }
-                    item("count") { CountRow(visible.size, all.isNotEmpty(), exportBatch) }
-                    eventSections(visible, time) { navigator.push(Route.Detail(it)) }
+                    item("count") { CountRow(visible.size, requests.isNotEmpty(), exportBatch) }
+                    eventSections(visible, time) { navigator.push(Route.Detail(it, "Requests")) }
                 }
                 Segment.Destinations -> destinations(Presentation.destinations(searched), days, time) {
                     navigator.show("Copied: $it")
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun StorageScreen() {
+    val navigator = LocalNavigator.current
+    val filter = navigator.storageFilter
+    val query = navigator.storageQuery
+    val all by remember { StackAudit.events(limit = 2_000) }.collectAsState(emptyList())
+    val visible = all.filter { filter.matches(it) && Presentation.matchesSearch(it, query) }
+    val time = now()
+    Column(Modifier.fillMaxSize()) {
+        NavBar(
+            title = "Storage",
+            large = true,
+            leading = { BarText("Close", onClick = navigator.onClose) },
+            trailing = { BarIcon(Icons.Trash, enabled = visible.isNotEmpty()) { navigator.confirmDelete(visible) } },
+        )
+        SearchBar(query, "Search key, table or statement", { navigator.storageQuery = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+            item("chips") {
+                FlowChips(StorageFilter.entries, filter, StorageFilter::title, { navigator.storageFilter = it }, Modifier.padding(top = 4.dp))
+            }
+            item("count") {
+                Txt("${visible.size} events in this filter", Modifier.padding(start = 16.dp, top = 12.dp), size = 13f, color = palette.secondary)
+            }
+            eventSections(visible, time) { navigator.push(Route.Detail(it, "Storage")) }
+        }
+    }
+}
+
+@Composable
+internal fun RecordsScreen() {
+    val navigator = LocalNavigator.current
+    val filter = navigator.recordFilter
+    val all by remember { StackAudit.events(limit = 2_000) }.collectAsState(emptyList())
+    val visible = all.filter(filter::matches)
+    val time = now()
+    Column(Modifier.fillMaxSize()) {
+        NavBar(
+            title = "Other Records",
+            large = false,
+            leading = { BackButton("Settings") { navigator.pop() } },
+            trailing = { BarIcon(Icons.Trash, enabled = visible.isNotEmpty()) { navigator.confirmDelete(visible) } },
+        )
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+            item("chips") {
+                FlowChips(RecordFilter.entries, filter, RecordFilter::title, { navigator.recordFilter = it }, Modifier.padding(top = 8.dp))
+            }
+            item("count") {
+                Txt("${visible.size} events in this filter", Modifier.padding(start = 16.dp, top = 12.dp), size = 13f, color = palette.secondary)
+            }
+            eventSections(visible, time) { navigator.push(Route.Detail(it, "Records")) }
         }
     }
 }
@@ -152,7 +207,7 @@ private fun shape(
     return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
 }
 
-private fun LazyListScope.eventSections(
+internal fun LazyListScope.eventSections(
     events: List<AuditEventSummary>,
     time: Long,
     onOpen: (AuditEventSummary) -> Unit,

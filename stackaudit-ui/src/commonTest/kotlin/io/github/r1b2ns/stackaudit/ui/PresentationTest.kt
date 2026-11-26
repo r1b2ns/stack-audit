@@ -3,6 +3,7 @@ package io.github.r1b2ns.stackaudit.ui
 import io.github.r1b2ns.stackaudit.AuditEventSummary
 import io.github.r1b2ns.stackaudit.BodyRef
 import io.github.r1b2ns.stackaudit.Category
+import io.github.r1b2ns.stackaudit.FlagState
 import io.github.r1b2ns.stackaudit.FlagValue
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
@@ -116,19 +117,79 @@ class PresentationTest {
     }
 
     @Test
-    fun filtersByCategoryAndErrors() {
-        assertEquals(
-            listOf("All", "Network", "WebSocket", "Storage", "Database", "Analytics", "Flags", "Log", "Errors"),
-            Filter.entries.map { it.title },
-        )
+    fun requestFiltersKeepOnlyApiTraffic() {
+        assertEquals(listOf("All", "Network", "WebSocket", "Analytics", "Errors"), Filter.entries.map { it.title })
         val ok = http("1", "t")
         val failed = http("2", "t", status = 503)
-        val storage = other("3", Category.Storage, "prefs")
-        val events = listOf(ok, failed, storage)
-        assertEquals(events, events.filter(Filter.All::matches))
+        val socket = other("3", Category.WebSocket, "WS failed wss://a.test")
+        val event = other("4", Category.Analytics, "firebase: login")
+        val invalid = other("5", Category.Analytics, "firebase: x (invalid)")
+        val storage = other("6", Category.Storage, "prefs")
+        val flag = other("7", Category.Flag, "flag a = true (remote)")
+        val events = listOf(ok, failed, socket, event, invalid, storage, flag)
+        assertEquals(listOf(ok, failed, socket, event, invalid), events.filter(Filter.All::matches))
         assertEquals(listOf(ok, failed), events.filter(Filter.Network::matches))
-        assertEquals(listOf(failed), events.filter(Filter.Errors::matches))
-        assertEquals(listOf(storage), events.filter(Filter.Storage::matches))
+        assertEquals(listOf(socket), events.filter(Filter.WebSocket::matches))
+        assertEquals(listOf(event, invalid), events.filter(Filter.Analytics::matches))
+        assertEquals(listOf(failed, socket, invalid), events.filter(Filter.Errors::matches))
+    }
+
+    @Test
+    fun storageFiltersKeepStorageAndDatabase() {
+        assertEquals(listOf("All", "Storage", "Database"), StorageFilter.entries.map { it.title })
+        val request = http("1", "t")
+        val storage = other("2", Category.Storage, "prefs")
+        val database = other("3", Category.Database, "SELECT 1")
+        val flag = other("4", Category.Flag, "flag a = true (remote)")
+        val events = listOf(request, storage, database, flag)
+        assertEquals(listOf(storage, database), events.filter(StorageFilter.All::matches))
+        assertEquals(listOf(storage), events.filter(StorageFilter.Storage::matches))
+        assertEquals(listOf(database), events.filter(StorageFilter.Database::matches))
+    }
+
+    @Test
+    fun recordFiltersKeepFlagsAndTheLog() {
+        assertEquals(listOf("All", "Flags", "Log"), RecordFilter.entries.map { it.title })
+        val storage = other("2", Category.Storage, "prefs")
+        val flag = other("4", Category.Flag, "flag a = true (remote)")
+        val log = other("5", Category.Audit, "StackAudit started")
+        val events = listOf(http("1", "t"), storage, flag, log)
+        assertEquals(listOf(flag, log), events.filter(RecordFilter.All::matches))
+        assertEquals(listOf(flag), events.filter(RecordFilter.Flags::matches))
+        assertEquals(listOf(log), events.filter(RecordFilter.Log::matches))
+    }
+
+    @Test
+    fun storageLimitsAre200Mb500MbAnd1Gb() {
+        assertEquals(listOf("200 MB", "500 MB", "1 GB"), StorageLimit.entries.map { it.title })
+        assertEquals(listOf("200 MB", "500 MB", "1 GB"), StorageLimit.entries.map { Presentation.bytes(it.bytes) })
+        assertEquals(StorageLimit.Medium, StorageLimit.of(500_000_000))
+        assertEquals(null, StorageLimit.of(104_857_600))
+    }
+
+    @Test
+    fun flagOriginListsDefaultRemoteAndOverride() {
+        val plain = FlagState("banner", "firebase", FlagValue.Text("red"), null, null)
+        assertEquals("Default red · Remote —", Presentation.flagOrigin(plain))
+        val overridden = FlagState("limit", "firebase", FlagValue.Number(3.0), FlagValue.Number(5.0), FlagValue.Number(7.5))
+        assertEquals("Default 3 · Remote 5 · Override 7.5", Presentation.flagOrigin(overridden))
+        val empty = FlagState("title", "firebase", FlagValue.Text(""), FlagValue.Text(""), null)
+        assertEquals("Default \"\" · Remote \"\"", Presentation.flagOrigin(empty))
+    }
+
+    @Test
+    fun overridesParseByKindAndNameTheKind() {
+        assertEquals(FlagValue.Number(2.5), Presentation.parseOverride(FlagValue.Number(1.0), " 2.5 "))
+        assertEquals(null, Presentation.parseOverride(FlagValue.Number(1.0), "abc"))
+        assertEquals(FlagValue.Text("blue"), Presentation.parseOverride(FlagValue.Text("red"), "blue"))
+        assertEquals("7.5", Presentation.editableText(FlagValue.Number(7.5)))
+        assertEquals("number", Presentation.kindTitle(FlagValue.Number(1.0)))
+        assertEquals("text", Presentation.kindTitle(FlagValue.Text("")))
+    }
+
+    @Test
+    fun tabsAreRequestsStorageFlagsAndSettings() {
+        assertEquals(listOf("Requests", "Storage", "Flags", "Settings"), Tab.entries.map { it.title })
     }
 
     @Test

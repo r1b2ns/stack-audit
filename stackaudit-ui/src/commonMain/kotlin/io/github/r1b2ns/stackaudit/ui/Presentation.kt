@@ -3,6 +3,7 @@ package io.github.r1b2ns.stackaudit.ui
 import io.github.r1b2ns.stackaudit.AuditEventSummary
 import io.github.r1b2ns.stackaudit.BodyRef
 import io.github.r1b2ns.stackaudit.Category
+import io.github.r1b2ns.stackaudit.FlagState
 import io.github.r1b2ns.stackaudit.FlagValue
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -21,22 +22,54 @@ internal enum class Segment(val title: String) {
     Destinations("Destinations"),
 }
 
+internal enum class Tab(val title: String) {
+    Requests("Requests"),
+    Storage("Storage"),
+    Flags("Flags"),
+    Settings("Settings"),
+}
+
+internal val RequestCategories: Set<Category> = setOf(Category.Http, Category.WebSocket, Category.Analytics)
+
+internal val StorageCategories: Set<Category> = setOf(Category.Storage, Category.Database)
+
+internal enum class StorageLimit(val bytes: Long, val title: String) {
+    Small(200_000_000, "200 MB"),
+    Medium(500_000_000, "500 MB"),
+    Large(1_000_000_000, "1 GB"),
+    ;
+
+    companion object {
+        fun of(bytes: Long): StorageLimit? = entries.firstOrNull { it.bytes == bytes }
+    }
+}
+
+internal enum class StorageFilter(val title: String) {
+    All("All"),
+    Storage("Storage"),
+    Database("Database"),
+    ;
+
+    fun matches(event: AuditEventSummary): Boolean =
+        when (this) {
+            All -> event.category in StorageCategories
+            Storage -> event.category == Category.Storage
+            Database -> event.category == Category.Database
+        }
+}
+
 internal enum class Filter(val title: String) {
     All("All"),
     Network("Network"),
     WebSocket("WebSocket"),
-    Storage("Storage"),
-    Database("Database"),
     Analytics("Analytics"),
-    Flags("Flags"),
-    Log("Log"),
     Errors("Errors"),
     ;
 
     fun matches(event: AuditEventSummary): Boolean =
         when (this) {
-            All -> true
-            Errors -> !Presentation.isSuccess(event)
+            All -> event.category in RequestCategories
+            Errors -> event.category in RequestCategories && !Presentation.isSuccess(event)
             else -> event.category == category
         }
 
@@ -45,13 +78,23 @@ internal enum class Filter(val title: String) {
             when (this) {
                 Network -> Category.Http
                 WebSocket -> Category.WebSocket
-                Storage -> Category.Storage
-                Database -> Category.Database
                 Analytics -> Category.Analytics
-                Flags -> Category.Flag
-                Log -> Category.Audit
                 All, Errors -> null
             }
+}
+
+internal enum class RecordFilter(val title: String) {
+    All("All"),
+    Flags("Flags"),
+    Log("Log"),
+    ;
+
+    fun matches(event: AuditEventSummary): Boolean =
+        when (this) {
+            All -> event.category == Category.Flag || event.category == Category.Audit
+            Flags -> event.category == Category.Flag
+            Log -> event.category == Category.Audit
+        }
 }
 
 internal data class DayGroup(
@@ -389,4 +432,20 @@ internal object Presentation {
         }
 
     fun eventCount(count: Int): String = "$count events"
+
+    fun editableText(value: FlagValue): String = value.display
+
+    fun kindTitle(value: FlagValue): String =
+        when (value) {
+            is FlagValue.Bool -> "true or false"
+            is FlagValue.Number -> "number"
+            is FlagValue.Text -> "text"
+        }
+
+    fun flagOrigin(state: FlagState): String =
+        buildList {
+            add("Default ${state.defaultValue.display.ifEmpty { "\"\"" }}")
+            add("Remote ${state.remoteValue?.display?.ifEmpty { "\"\"" } ?: "—"}")
+            state.overrideValue?.let { add("Override ${it.display.ifEmpty { "\"\"" }}") }
+        }.joinToString(" · ")
 }
