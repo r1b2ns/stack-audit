@@ -1,17 +1,54 @@
-# StackAudit
+<h1 align="center">StackAudit</h1>
 
-A free, open-source audit and inspection library for mobile apps. The core is written in Kotlin Multiplatform, and it works in KMP, Android, iOS and Flutter projects.
+<p align="center">
+  <strong>One debug inspector for KMP, Android, iOS and Flutter.</strong><br>
+  Network, WebSocket, storage, SQL, analytics and feature flags, with secrets masked on the device.
+</p>
 
-StackAudit records what your app does at runtime and lets you browse it on the device:
+<p align="center">
+  <a href="https://central.sonatype.com/namespace/io.github.r1b2ns"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/io.github.r1b2ns/stackaudit-core"></a>
+  <a href="https://github.com/r1b2ns/stack-audit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/r1b2ns/stack-audit"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20KMP%20%7C%20Flutter-informational">
+  <img alt="Kotlin Multiplatform" src="https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white">
+</p>
 
-- REST requests and responses (OkHttp, Ktor, URLSession, `package:http`)
-- WebSocket connections and frames (Ktor, URLSessionWebSocketTask)
-- Key-value storage (SharedPreferences, UserDefaults, multiplatform-settings)
-- SQL statements (SQLDelight, Room, SQLite)
-- Analytics events, validated against a tracking plan
-- Feature flags, with local overrides
+StackAudit is a free, open-source library that records what your app does at runtime and lets you browse it on the device. Shake the phone and see every request, WebSocket frame, stored value, SQL statement, analytics event and feature flag, on Android and iOS, from the same tool.
 
-Everything stays on the device. Secrets are masked before they are written, and access to the log can require a signed, short-lived token.
+```kotlin
+StackAudit.start()
+```
+
+That is the whole setup on Android. On iOS, URLSession traffic is captured with no extra code.
+
+## Why StackAudit
+
+- **One tool for every platform.** The same viewer and the same API in KMP, Android, iOS and Flutter. No more one inspector per platform.
+- **More than HTTP.** WebSocket, SharedPreferences and UserDefaults, SQLDelight, Room and SQLite, analytics events checked against a tracking plan, and feature flags with local overrides.
+- **Safe by default.** Secrets are masked before they are written. The viewer can require a short-lived, single-use Ed25519-signed token, so it can stay in QA builds.
+- **Clean release builds.** No-op artifacts keep the same API and do nothing, so release builds carry no capture code.
+- **Nothing leaves the device.** No backend. Export to HAR or JSONL when you need to share a session.
+
+## What it captures
+
+| Source | Android | iOS | KMP | Flutter |
+|---|---|---|---|---|
+| REST | OkHttp | URLSession | Ktor | `package:http` |
+| WebSocket | OkHttp, Ktor | URLSessionWebSocketTask | Ktor | |
+| Key-value storage | SharedPreferences | UserDefaults | multiplatform-settings | |
+| SQL | Room, SQLDelight | SQLite | SQLDelight | |
+| Analytics events | ✓ | ✓ | ✓ | ✓ |
+| Feature flags | ✓ | ✓ | ✓ | ✓ |
+
+## How it compares
+
+| Tool | Platforms | Captures |
+|---|---|---|
+| Chucker | Android | HTTP (OkHttp) |
+| Pulse | Apple platforms | Network (URLSession) and logs |
+| netfox | iOS | HTTP |
+| Wormholy | iOS | HTTP |
+| **StackAudit** | **KMP, Android, iOS, Flutter** | **HTTP, WebSocket, storage, SQL, analytics, feature flags** |
 
 ## Installation
 
@@ -21,9 +58,9 @@ The libraries are published to Maven Central under `io.github.r1b2ns`.
 
 ```kotlin
 dependencies {
-    debugImplementation("io.github.r1b2ns:stackaudit-android:0.1.0")
-    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.1.0")
-    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.1.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-android:0.2.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.2.0")
+    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.2.0")
 }
 ```
 
@@ -44,7 +81,7 @@ The plugin adds the StackAudit interceptor to every `OkHttpClient.Builder().buil
 
 ```kotlin
 plugins {
-    id("io.github.r1b2ns.stackaudit") version "0.1.0"
+    id("io.github.r1b2ns.stackaudit") version "0.2.0"
 }
 
 stackAudit {
@@ -64,7 +101,7 @@ https://github.com/r1b2ns/stack-audit
 Or add it to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.1.0")
+.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.2.0")
 ```
 
 The package requires iOS 15 or later.
@@ -189,6 +226,10 @@ The `sign` command prints the token and a link of the form `myapp://stackaudit/o
 
 The viewer's Export action shares the HTTP log as a HAR file. From code, use `StackAudit.exportHar()` for HAR or `StackAudit.exportJsonl()` for every event as JSONL. Exports are masked by default. Passing `includeSecrets = true` adds raw values only where they exist, which is never the case in `Mask` mode.
 
+## Try the samples
+
+The repository includes sample apps for Android ([`samples/android`](samples/android)) and iOS ([`samples/ios`](samples/ios)) that exercise every capture source.
+
 ## Privacy
 
 StackAudit has no backend and sends nothing anywhere. See [PRIVACY.md](PRIVACY.md) for what it stores and how to ship it safely.
@@ -204,6 +245,10 @@ Requires JDK 17, Xcode, and (for the Flutter plugin) the Flutter SDK.
 ```bash
 swift test
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. If StackAudit helps your team, a star on the repository helps other developers find it.
 
 ## License
 
