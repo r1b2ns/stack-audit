@@ -48,6 +48,7 @@ import io.github.r1b2ns.stackaudit.AuditEventSummary
 import io.github.r1b2ns.stackaudit.BodyRef
 import io.github.r1b2ns.stackaudit.HttpPayload
 import io.github.r1b2ns.stackaudit.SecretRules
+import io.github.r1b2ns.stackaudit.Secrets
 import io.github.r1b2ns.stackaudit.StackAudit
 import io.github.r1b2ns.stackaudit.WebSocketPayload
 import kotlinx.coroutines.delay
@@ -100,6 +101,8 @@ internal class AuditNavigator(
     var recordFilter by mutableStateOf(RecordFilter.All)
     var storageFilter by mutableStateOf(StorageFilter.All)
     var storageQuery by mutableStateOf("")
+    var recordQuery by mutableStateOf("")
+    var flagQuery by mutableStateOf("")
     var sheet by mutableStateOf<SheetRoute?>(null)
     var toast by mutableStateOf<String?>(null)
     var toastId by mutableIntStateOf(0)
@@ -164,6 +167,8 @@ internal fun tabContentBottom(): Dp = 40.dp + LocalTabBarHeight.current + Window
 internal fun now(): Long = Clock.System.now().toEpochMilliseconds()
 
 internal fun secretRules(): SecretRules = StackAudit.config?.secrets?.rules ?: SecretRules.Default
+
+internal fun exportMasks(): Boolean = StackAudit.config?.secrets !is Secrets.Show
 
 internal fun retentionDays(): Long = StackAudit.config?.retention?.inWholeDays ?: 7
 

@@ -53,14 +53,14 @@ internal fun AuditListScreen() {
         NavBar(
             title = "Requests",
             large = true,
-            leading = { BarText("Close", onClick = navigator.onClose) },
+            leading = { BarIcon(Icons.Close, onClick = navigator.onClose) },
             trailing = {
                 BarIcon(Icons.Trash, enabled = deleting) { navigator.confirmDelete(visible) }
                 BarIcon(Icons.Share, enabled = requests.isNotEmpty(), onClick = exportBatch)
             },
         )
-        SearchBar(query, "Search host or path", { navigator.query = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+        SearchBar(query, "Search requests", { navigator.query = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+        LazyColumn(Modifier.fillMaxSize().dismissKeyboardOnScroll(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
             item("banner") { Banner(days) { navigator.select(Tab.Settings) } }
             item("tiles") { Tiles(Presentation.today(all, time), Modifier.padding(top = 14.dp)) }
             item("segment") {
@@ -94,11 +94,11 @@ internal fun StorageScreen() {
         NavBar(
             title = "Storage",
             large = true,
-            leading = { BarText("Close", onClick = navigator.onClose) },
+            leading = { BarIcon(Icons.Close, onClick = navigator.onClose) },
             trailing = { BarIcon(Icons.Trash, enabled = visible.isNotEmpty()) { navigator.confirmDelete(visible) } },
         )
         SearchBar(query, "Search key, table or statement", { navigator.storageQuery = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+        LazyColumn(Modifier.fillMaxSize().dismissKeyboardOnScroll(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
             item("chips") {
                 FlowChips(StorageFilter.entries, filter, StorageFilter::title, { navigator.storageFilter = it }, Modifier.padding(top = 4.dp))
             }
@@ -114,8 +114,9 @@ internal fun StorageScreen() {
 internal fun RecordsScreen() {
     val navigator = LocalNavigator.current
     val filter = navigator.recordFilter
+    val query = navigator.recordQuery
     val all by remember { StackAudit.events(limit = 2_000) }.collectAsState(emptyList())
-    val visible = all.filter(filter::matches)
+    val visible = all.filter { filter.matches(it) && Presentation.matchesSearch(it, query) }
     val time = now()
     Column(Modifier.fillMaxSize()) {
         NavBar(
@@ -124,7 +125,8 @@ internal fun RecordsScreen() {
             leading = { BackButton("Settings") { navigator.pop() } },
             trailing = { BarIcon(Icons.Trash, enabled = visible.isNotEmpty()) { navigator.confirmDelete(visible) } },
         )
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
+        SearchBar(query, "Search records", { navigator.recordQuery = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+        LazyColumn(Modifier.fillMaxSize().dismissKeyboardOnScroll(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = tabContentBottom())) {
             item("chips") {
                 FlowChips(RecordFilter.entries, filter, RecordFilter::title, { navigator.recordFilter = it }, Modifier.padding(top = 8.dp))
             }
@@ -258,7 +260,7 @@ private fun EventRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Txt(Presentation.method(event), size = 12f, weight = FontWeight.Bold, mono = true, maxLines = 1)
                 Txt(Presentation.headline(event), Modifier.weight(1f), size = 15f, weight = FontWeight.SemiBold, maxLines = 1)
-                Txt(Presentation.shortTime(event.timestamp), size = 13f, color = palette.secondary, maxLines = 1)
+                Txt(Presentation.clockTime(event.timestamp), size = 13f, color = palette.secondary, maxLines = 1)
             }
             Txt(Presentation.path(event), size = 13f, mono = true, color = palette.secondary, maxLines = 1)
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -273,6 +275,7 @@ private fun EventRow(
                 Txt(Presentation.sizes(event), Modifier.weight(1f), size = 12f, color = palette.secondary, maxLines = 1)
             }
         }
+        Glyph(Icons.ChevronRight, 13.dp, palette.tertiary, Modifier.align(Alignment.CenterVertically))
     }
 }
 

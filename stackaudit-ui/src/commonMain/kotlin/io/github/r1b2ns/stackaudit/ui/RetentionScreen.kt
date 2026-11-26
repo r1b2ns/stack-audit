@@ -48,14 +48,17 @@ import io.github.r1b2ns.stackaudit.StackAudit
 private fun TabScreen(
     title: String,
     trailing: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+    search: (@Composable () -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     val navigator = LocalNavigator.current
     Column(Modifier.fillMaxSize()) {
-        NavBar(title = title, large = true, leading = { BarText("Close", onClick = navigator.onClose) }, trailing = trailing)
+        NavBar(title = title, large = true, leading = { BarIcon(Icons.Close, onClick = navigator.onClose) }, trailing = trailing)
+        search?.invoke()
         Column(
             Modifier
                 .fillMaxSize()
+                .dismissKeyboardOnScroll()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = tabContentBottom()),
             verticalArrangement = Arrangement.spacedBy(28.dp),
@@ -186,17 +189,29 @@ private fun LocationRow(
 
 @Composable
 internal fun FlagsScreen() {
+    val navigator = LocalNavigator.current
     val states by StackAudit.flags.states.collectAsState()
     val canEdit = StackAudit.allows(Scope.Flags)
+    val query = navigator.flagQuery
+    val visible = states.values.filter { Presentation.matchesSearch(it, query) }.sortedBy { it.key }
     TabScreen(
         "Flags",
         trailing = {
             if (canEdit && states.values.any { it.overrideValue != null }) BarText("Reset All") { StackAudit.flags.clearOverrides() }
         },
+        search = {
+            SearchBar(query, "Search flags", { navigator.flagQuery = it }, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+        },
     ) {
         if (states.isEmpty()) {
             CardSection(footer = "Flags appear here after the app reads them.") {
                 Txt("No flag read yet.", Modifier.padding(16.dp), size = 17f, color = palette.secondary)
+            }
+            return@TabScreen
+        }
+        if (visible.isEmpty()) {
+            CardSection {
+                Txt("No flag matches \"${query.trim()}\".", Modifier.padding(16.dp), size = 17f, color = palette.secondary)
             }
             return@TabScreen
         }
@@ -209,7 +224,7 @@ internal fun FlagsScreen() {
                     "Overrides need the flags scope."
                 },
         ) {
-            states.values.sortedBy { it.key }.forEachIndexed { index, state ->
+            visible.forEachIndexed { index, state ->
                 if (index > 0) CardDivider()
                 FlagRow(state, canEdit)
             }

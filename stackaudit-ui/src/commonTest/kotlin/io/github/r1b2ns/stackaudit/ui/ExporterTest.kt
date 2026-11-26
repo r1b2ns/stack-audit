@@ -129,13 +129,108 @@ class ExporterTest {
         assertEquals("Status: 200 OK · 42 ms", lines[1])
         assertEquals("When: Nov 14, 2023 at 10:13:20 PM", lines[2])
         assertTrue("Sent: 0 bytes · Received: 11 bytes" in lines)
-        assertTrue("Response:" in lines)
-        assertFalse("Response:" in exporter.text(event(), includeBody = false))
+        assertTrue("Response Body:" in lines)
+        assertFalse("Response Body:" in exporter.text(event(), includeBody = false))
+    }
+
+    @Test
+    fun textCarriesHeadersAndBodiesOfRequestAndResponse() {
+        val item = event(method = "POST", requestBody = """{"password":"hunter2","name":"a"}""")
+        val lines = exporter.text(item, includeBody = true).lines()
+        val requestHeaders = lines.indexOf("Request Headers:")
+        val requestBody = lines.indexOf("Request Body:")
+        val responseHeaders = lines.indexOf("Response Headers:")
+        val responseBody = lines.indexOf("Response Body:")
+        assertTrue(requestHeaders in 0 until requestBody, lines.toString())
+        assertTrue(requestBody < responseHeaders && responseHeaders < responseBody, lines.toString())
+        assertEquals("Authorization: Bearer ••••mnop", lines[requestHeaders + 1])
+        assertTrue("Accept: application/json" in lines)
+        assertTrue(lines[requestBody + 1].contains("\"name\":\"a\""))
+        assertFalse(lines[requestBody + 1].contains("hunter2"))
+        assertEquals("Content-Type: application/json", lines[responseHeaders + 1])
+        assertEquals("""{"ok":true}""", lines[responseBody + 1])
+        val noBodies = exporter.text(item, includeBody = false).lines()
+        assertTrue("Request Headers:" in noBodies && "Response Headers:" in noBodies)
+        assertFalse("Request Body:" in noBodies)
+    }
+
+    @Test
+    fun textMarksMissingRequestBodyAsEmpty() {
+        val lines = exporter.text(event(), includeBody = true).lines()
+        assertEquals("(empty)", lines[lines.indexOf("Request Body:") + 1])
+    }
+
+    @Test
+    fun textDescribesNonHttpEvents() {
+        val lines = exporter.text(storage(), includeBody = true).lines()
+        assertEquals("KV prefs: theme", lines[0])
+        assertTrue("Key: theme" in lines)
+        assertTrue("NewValue: dark" in lines)
+        assertFalse(lines.any { it.startsWith("OldValue") })
+    }
+
+    @Test
+    fun textBatchSeparatesEvents() {
+        val text = exporter.batch(listOf(event(), storage(), event(method = "POST")), BatchFormat.Text, includeBodies = true)
+        val parts = text.split("\n\n${Exporter.SEPARATOR}\n\n")
+        assertEquals(3, parts.size)
+        assertTrue(parts[0].startsWith("Event 1 of 3\nGET https://api.test"))
+        assertTrue(parts[1].startsWith("Event 2 of 3\nKV prefs: theme"))
+        assertTrue(parts[2].startsWith("Event 3 of 3\nPOST "))
+        assertTrue(parts.all { "Response Body:" in it || it.contains("KV") })
+        val single = exporter.batch(listOf(event()), BatchFormat.Text, includeBodies = true)
+        assertFalse(Exporter.SEPARATOR in single)
+        assertFalse(single.startsWith("Event"))
+        val head = exporter.batch(listOf(event(), storage()), BatchFormat.Text, includeBodies = true, total = 65)
+        assertTrue(head.startsWith("Event 1 of 65\n"))
+        assertTrue("Event 2 of 65\n" in head)
+    }
+
+    @Test
+    fun expandedPreviewIsCappedWithANote() {
+        assertEquals("short", limitPreview("short"))
+        val long = limitPreview("x".repeat(300_000))
+        assertTrue(long.length < 210_000)
+        assertTrue(long.endsWith("Share the file to get everything."))
+    }
+
+    @Test
+    fun textIsTheFirstFormatInBothSheets() {
+        assertEquals(BatchFormat.Text, BatchFormat.entries.first())
+        assertEquals(EventFormat.Text, EventFormat.entries.first())
     }
 
     @Test
     fun countsMaskedHeaders() {
         assertEquals(1, exporter.maskedHeaderCount(event()))
         assertEquals(0, exporter.maskedHeaderCount(storage()))
+    }
+
+    @Test
+    fun unmaskedExporterKeepsSecretsInEveryFormat() {
+        val raw = Exporter(zone = TimeZone.UTC, masks = false)
+        val item = event(method = "POST", requestBody = """{"password":"hunter2","name":"a"}""")
+        val outputs =
+            listOf(
+                raw.text(item, includeBody = true),
+                raw.curl(item, includeBody = true),
+                raw.batch(listOf(item), BatchFormat.Json, includeBodies = true),
+                raw.batch(listOf(item), BatchFormat.Har, includeBodies = true),
+            )
+        outputs.forEach { output ->
+            assertTrue("abcdefghijklmnop" in output, output)
+            assertTrue("abcdef123456" in output, output)
+            assertTrue("hunter2" in output, output)
+            assertFalse("••••" in output, output)
+        }
+    }
+
+    @Test
+    fun labelsSayWhetherExportsAreMasked() {
+        assertEquals("Copied (masked)", copiedLabel("Copied", masks = true))
+        assertEquals("Copied", copiedLabel("Copied", masks = false))
+        assertEquals("Already masked", bodiesSubtitle(0, masks = true))
+        assertEquals("Not masked", bodiesSubtitle(0, masks = false))
+        assertTrue(bodiesSubtitle(2048, masks = false).endsWith("of request and response, not masked"))
     }
 }

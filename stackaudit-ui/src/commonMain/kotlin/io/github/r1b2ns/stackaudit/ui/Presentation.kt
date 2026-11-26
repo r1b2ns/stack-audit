@@ -283,6 +283,15 @@ internal object Presentation {
         return "$hm $period"
     }
 
+    fun clockTime(
+        epochMs: Long,
+        zone: TimeZone = TimeZone.currentSystemDefault(),
+    ): String {
+        val time = local(epochMs, zone)
+        val (hm, period) = clock(time)
+        return "$hm:${time.second.toString().padStart(2, '0')} $period"
+    }
+
     fun shortDate(
         epochMs: Long,
         zone: TimeZone = TimeZone.currentSystemDefault(),
@@ -374,9 +383,43 @@ internal object Presentation {
         event: AuditEventSummary,
         query: String,
     ): Boolean {
-        val needle = query.trim()
-        if (needle.isEmpty()) return true
-        return listOfNotNull(event.host, event.method, event.title).any { it.contains(needle, ignoreCase = true) }
+        val fields =
+            listOfNotNull(
+                event.title,
+                event.host,
+                event.method,
+                event.source,
+                method(event),
+                path(event),
+                categoryTitle(event.category),
+                statusText(event),
+                event.status?.toString(),
+            )
+        return matchesTerms(fields, query)
+    }
+
+    fun matchesSearch(
+        state: FlagState,
+        query: String,
+    ): Boolean =
+        matchesTerms(
+            listOf(
+                state.key,
+                state.provider,
+                state.source.name,
+                state.effective.display,
+                flagOrigin(state),
+            ),
+            query,
+        )
+
+    fun matchesTerms(
+        fields: List<String>,
+        query: String,
+    ): Boolean {
+        val terms = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (terms.isEmpty()) return true
+        return terms.all { term -> fields.any { it.contains(term, ignoreCase = true) } }
     }
 
     fun isMasked(value: String): Boolean = "••••" in value

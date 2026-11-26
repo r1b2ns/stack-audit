@@ -118,6 +118,7 @@ internal fun EventDetailScreen(
         Column(
             Modifier
                 .fillMaxSize()
+                .dismissKeyboardOnScroll()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -275,6 +276,7 @@ private fun HttpSections(
         headers = headers,
         footer =
             when {
+                !exportMasks() -> Exporter.UNMASKED_NOTE
                 canReveal -> "Secrets are stored masked and only appear after the handshake. Exports always mask them."
                 masked -> "Secrets are masked before they are stored. Copying and exporting always use the masked version."
                 else -> null

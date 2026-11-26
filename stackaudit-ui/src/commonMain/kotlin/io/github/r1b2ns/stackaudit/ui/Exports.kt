@@ -30,6 +30,7 @@ internal enum class BatchFormat(
     val mimeType: String,
     val hint: String,
 ) {
+    Text("Text", "txt", "text/plain", "Readable text with the headers and bodies of each request and response, one event after another."),
     Json("JSON", "json", "application/json", "A .json file with every field of each event."),
     Har("HAR", "har", "application/json", "HTTP Archive format: opens in Safari, Chrome, Charles and Proxyman."),
     Csv("CSV", "csv", "text/csv", "One line per event, for spreadsheets. Bodies and headers are left out."),
@@ -44,10 +45,10 @@ internal enum class EventFormat(
     val mimeType: String,
     val hint: String,
 ) {
+    Text("Text", "txt", "text/plain", "The whole request and response: headers and bodies, good for a support ticket or email."),
     Curl("cURL", "sh", "text/plain", "A command to repeat the request in Terminal."),
     Json("JSON", "json", "application/json", "The whole event in .json: request, response and metadata."),
     Har("HAR", "har", "application/json", "HTTP Archive with one entry: opens in Safari, Chrome, Charles and Proxyman."),
-    Text("Text", "txt", "text/plain", "A readable summary, good for pasting in a support ticket or email."),
 }
 
 internal data class ExportEvent(
@@ -61,8 +62,13 @@ internal data class ExportEvent(
 internal class Exporter(
     rules: SecretRules = SecretRules.Default,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
+    val masks: Boolean = true,
 ) {
     private val scrubber = SecretScrubber(rules)
+
+    private fun maskUrl(url: String): String = if (masks) scrubber.url(url) else url
+
+    private fun maskSql(sql: String): String = if (masks) scrubber.sql(sql) else sql
 
     @OptIn(ExperimentalSerializationApi::class)
     private val json =
@@ -75,12 +81,25 @@ internal class Exporter(
         events: List<ExportEvent>,
         format: BatchFormat,
         includeBodies: Boolean,
+        total: Int = events.size,
     ): String =
         when (format) {
             BatchFormat.Json -> encode(JsonArray(events.map { jsonEvent(it, includeBodies) }))
             BatchFormat.Har -> har(events, includeBodies)
             BatchFormat.Csv -> csv(events)
+            BatchFormat.Text -> textBatch(events, includeBodies, total)
         }
+
+    fun textBatch(
+        events: List<ExportEvent>,
+        includeBodies: Boolean,
+        total: Int = events.size,
+    ): String {
+        if (total == 1 && events.size == 1) return text(events.first(), includeBodies)
+        return events
+            .mapIndexed { index, item -> "Event ${index + 1} of $total\n" + text(item, includeBodies) }
+            .joinToString("\n\n$SEPARATOR\n\n")
+    }
 
     fun single(
         event: ExportEvent,
@@ -99,14 +118,14 @@ internal class Exporter(
         return (headers(http.requestHeaders) + headers(http.responseHeaders)).count { Presentation.isMasked(it.value) }
     }
 
-    fun headers(list: List<Header>): List<Header> = scrubber.headers(list)
+    fun headers(list: List<Header>): List<Header> = if (masks) scrubber.headers(list) else list
 
-    fun url(event: ExportEvent): String = event.http?.let { scrubber.url(it.url) } ?: event.event.title
+    fun url(event: ExportEvent): String = event.http?.let { maskUrl(it.url) } ?: event.event.title
 
     fun body(
         text: String?,
         contentType: String?,
-    ): String? = text?.let { scrubber.body(it, contentType) }
+    ): String? = text?.let { if (masks) scrubber.body(it, contentType) else it }
 
     fun timestamp(epochMs: Long): String {
         val instant = Instant.fromEpochMilliseconds(epochMs)
@@ -150,7 +169,7 @@ internal class Exporter(
 
     private fun hostAndPath(event: ExportEvent): Pair<String, String> {
         val http = event.http ?: return event.event.title to event.event.source
-        return Presentation.hostAndPath(scrubber.url(http.url))
+        return Presentation.hostAndPath(maskUrl(http.url))
     }
 
     private fun method(event: ExportEvent): String =
@@ -177,7 +196,7 @@ internal class Exporter(
                 JsonObject(
                     mapOf(
                         "connectionId" to string(payload.connectionId),
-                        "url" to string(scrubber.url(payload.url)),
+                        "url" to string(maskUrl(payload.url)),
                         "event" to string(payload.kind.name.lowercase()),
                         "code" to number(payload.code),
                         "reason" to string(payload.reason),
@@ -199,7 +218,7 @@ internal class Exporter(
                 JsonObject(
                     mapOf(
                         "database" to string(payload.database),
-                        "sql" to string(scrubber.sql(payload.sql)),
+                        "sql" to string(maskSql(payload.sql)),
                         "arguments" to JsonArray(payload.arguments.map(::string)),
                         "rowsAffected" to number(payload.rowsAffected),
                         "error" to string(payload.error),
@@ -252,7 +271,7 @@ internal class Exporter(
                 "direction" to string(direction(event.category)),
                 "category" to string(Presentation.categoryTitle(event.category)),
                 "method" to string(method(item)),
-                "url" to string(http?.let { scrubber.url(it.url) }),
+                "url" to string(http?.let { maskUrl(it.url) }),
                 "host" to string(host),
                 "path" to string(path),
                 "status" to number(http?.status),
@@ -280,7 +299,7 @@ internal class Exporter(
         val entries =
             events.mapNotNull { item ->
                 val http = item.http ?: return@mapNotNull null
-                val url = scrubber.url(http.url)
+                val url = maskUrl(http.url)
                 val version = http.protocol?.uppercase()?.takeIf { it.startsWith("HTTP") } ?: "HTTP/1.1"
                 val duration = (item.event.durationMs ?: 0).toDouble()
                 val requestBody = if (includeBodies) body(item.requestBody, http.requestBody?.contentType) else null
@@ -408,7 +427,7 @@ internal class Exporter(
         val http = item.http ?: return "# cURL is only available for network requests."
         var head = "curl"
         if (http.method != "GET") head += " -X ${http.method}"
-        head += " " + quote(scrubber.url(http.url))
+        head += " " + quote(maskUrl(http.url))
         val parts = mutableListOf(head)
         headers(http.requestHeaders)
             .filter { it.name.lowercase() !in SKIPPED_CURL_HEADERS }
@@ -428,7 +447,7 @@ internal class Exporter(
         val http = item.http
         val lines = mutableListOf<String>()
         if (http != null) {
-            lines += "${http.method} ${scrubber.url(http.url)}"
+            lines += "${http.method} ${maskUrl(http.url)}"
             var status = Presentation.statusTitle(http.status, http.error)
             event.durationMs?.let { status += " · $it ms" }
             lines += "Status: $status"
@@ -438,28 +457,53 @@ internal class Exporter(
         }
         lines += "When: ${Presentation.mediumDateTime(event.timestamp, zone)}"
         lines += "Origin: ${event.source}"
-        if (http != null) {
-            lines += "Sent: ${Presentation.bytes(requestSize(item))} · Received: ${Presentation.bytes(responseSize(item))}"
-            headers(http.requestHeaders).forEach { lines += "${it.name}: ${it.value}" }
-        }
-        if (includeBody && http != null) {
-            body(item.requestBody, http.requestBody?.contentType)?.takeIf { it.isNotEmpty() }?.let {
-                lines += ""
-                lines += "Request:"
-                lines += it
+        if (http == null) {
+            (details(event) as? JsonObject)?.forEach { (key, value) ->
+                val shown = detailText(value) ?: return@forEach
+                lines += "${key.replaceFirstChar { it.uppercase() }}: $shown"
             }
-            body(item.responseBody, http.responseBody?.contentType)?.takeIf { it.isNotEmpty() }?.let {
-                lines += ""
-                lines += "Response:"
-                lines += it
+            if (includeBody) {
+                item.requestBody?.takeIf { it.isNotEmpty() }?.let {
+                    lines += ""
+                    lines += "Message:"
+                    lines += body(it, null).orEmpty()
+                }
             }
+            return lines.joinToString("\n")
         }
+        lines += "Sent: ${Presentation.bytes(requestSize(item))} · Received: ${Presentation.bytes(responseSize(item))}"
+        section(lines, "Request Headers", headerLines(http.requestHeaders))
+        if (includeBody) section(lines, "Request Body", body(item.requestBody, http.requestBody?.contentType))
+        section(lines, "Response Headers", headerLines(http.responseHeaders))
+        if (includeBody) section(lines, "Response Body", body(item.responseBody, http.responseBody?.contentType))
         return lines.joinToString("\n")
     }
+
+    private fun headerLines(list: List<Header>): String = headers(list).joinToString("\n") { "${it.name}: ${it.value}" }
+
+    private fun section(
+        lines: MutableList<String>,
+        title: String,
+        content: String?,
+    ) {
+        lines += ""
+        lines += "$title:"
+        lines += content?.takeIf { it.isNotEmpty() } ?: "(empty)"
+    }
+
+    private fun detailText(value: JsonElement): String? =
+        when (value) {
+            is JsonNull -> null
+            is JsonPrimitive -> value.content
+            is JsonArray -> if (value.isEmpty()) null else value.toString()
+            is JsonObject -> if (value.isEmpty()) null else value.toString()
+        }
 
     companion object {
         const val CSV_HEADER: String = "time,direction,method,host,path,status,sent,received,category"
         const val VERSION: String = "0.1.0"
+        val SEPARATOR: String = "-".repeat(48)
+        const val UNMASKED_NOTE: String = "Secrets.Show is on, so tokens, passwords and other secrets are stored, shown and exported as they are. Use it only on local debug builds."
         private val SKIPPED_CURL_HEADERS = setOf("content-length", "host", "connection")
 
         val maskedItems: List<String> =

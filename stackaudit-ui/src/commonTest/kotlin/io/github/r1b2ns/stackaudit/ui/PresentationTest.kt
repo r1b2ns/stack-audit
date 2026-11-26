@@ -48,6 +48,8 @@ class PresentationTest {
     fun formatsTimesInEnglish() {
         assertEquals("10:13 PM", Presentation.shortTime(base, TimeZone.UTC))
         assertEquals("12:00 AM", Presentation.shortTime(0, TimeZone.UTC))
+        assertEquals("10:13:20 PM", Presentation.clockTime(base, TimeZone.UTC))
+        assertEquals("12:00:00 AM", Presentation.clockTime(0, TimeZone.UTC))
         assertEquals("Nov 14, 2023", Presentation.shortDate(base, TimeZone.UTC))
         assertEquals("Nov 14, 2023 at 10:13:20.000 PM", Presentation.dateTime(base, TimeZone.UTC))
         assertEquals("Nov 14, 2023 at 10:13:20 PM", Presentation.mediumDateTime(base, TimeZone.UTC))
@@ -199,6 +201,41 @@ class PresentationTest {
         assertTrue(Presentation.matchesSearch(event, "API"))
         assertTrue(Presentation.matchesSearch(event, "/v1/users"))
         assertFalse(Presentation.matchesSearch(event, "orders"))
+    }
+
+    @Test
+    fun searchesEveryVisibleFieldOfAnEvent() {
+        val failed = http("1", "POST api.test/v1/orders", host = "api.test", method = "POST", status = 404)
+        assertTrue(Presentation.matchesSearch(failed, "okhttp"))
+        assertTrue(Presentation.matchesSearch(failed, "network"))
+        assertTrue(Presentation.matchesSearch(failed, "not found"))
+        assertTrue(Presentation.matchesSearch(failed, "404"))
+        assertTrue(Presentation.matchesSearch(failed, "post"))
+        val stored = other("2", Category.Storage, "set auth_token")
+        assertTrue(Presentation.matchesSearch(stored, "auth_token"))
+        assertTrue(Presentation.matchesSearch(stored, "KV"))
+        assertTrue(Presentation.matchesSearch(stored, "storage"))
+        assertFalse(Presentation.matchesSearch(stored, "network"))
+    }
+
+    @Test
+    fun requiresEveryTermToMatch() {
+        val event = http("1", "GET api.test/v1/users 200", host = "api.test")
+        assertTrue(Presentation.matchesSearch(event, "  api.test   users "))
+        assertTrue(Presentation.matchesSearch(event, "GET users"))
+        assertFalse(Presentation.matchesSearch(event, "GET orders"))
+    }
+
+    @Test
+    fun searchesFlags() {
+        val state = FlagState("new_checkout", "remote_config", FlagValue.Bool(false), remoteValue = FlagValue.Bool(true))
+        assertTrue(Presentation.matchesSearch(state, ""))
+        assertTrue(Presentation.matchesSearch(state, "checkout"))
+        assertTrue(Presentation.matchesSearch(state, "REMOTE_CONFIG"))
+        assertTrue(Presentation.matchesSearch(state, "remote true"))
+        assertTrue(Presentation.matchesSearch(state, "default false"))
+        assertFalse(Presentation.matchesSearch(state, "override"))
+        assertFalse(Presentation.matchesSearch(state, "dark_mode"))
     }
 
     @Test
