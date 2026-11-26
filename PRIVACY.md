@@ -34,7 +34,7 @@ Long values keep their last four characters so you can tell them apart. You can 
 
 Masking works on names. A secret stored under a name StackAudit does not know is recorded as is, and so is personal data such as names, e-mail addresses or health data in request bodies. Add those field names to the configuration, or turn the category off.
 
-In `ShowAfterHandshake` mode the masked copy is what the log shows, and the raw value is stored encrypted next to it. In `Show` mode nothing is masked.
+In `ShowAfterHandshake` mode the masked copy is what the log shows, and the raw value is stored encrypted next to it. In `Show` mode nothing is masked, in storage, in the viewer or in exports.
 
 ## Where the data lives
 
@@ -49,7 +49,7 @@ The data is private to your app's sandbox, like any other app data. Each event i
 ## How long it is kept
 
 - Events older than `retention` (7 days by default) are deleted.
-- When the store exceeds `maxStorage` (100 MB by default), the oldest events are deleted first.
+- When the store exceeds `maxStorage` (200 MB by default), the oldest events are deleted first.
 - `StackAudit.clear()` deletes every event at once. Uninstalling the app deletes everything.
 
 ## Who can see it
@@ -65,7 +65,7 @@ StackAudit makes no network requests of its own. The log leaves the device only 
 - Taps Export in the viewer, which hands a HAR file to the system share sheet, or
 - Calls `exportHar()` or `exportJsonl()` from your code and sends the result somewhere.
 
-Exports are masked unless secrets are requested and available.
+Exports are masked unless secrets are requested and available, or `Show` mode is on, in which case they carry raw values.
 
 ## Shipping it safely
 
