@@ -13,20 +13,9 @@
   <img alt="Kotlin Multiplatform" src="https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white">
 </p>
 
-<table align="center">
-  <tr>
-    <td align="center"><img src="docs/media/ios-requests.png" width="240" alt="Request list"><br><sub>Every request, with status and size</sub></td>
-    <td align="center"><img src="docs/media/ios-masked-secret.png" width="240" alt="Masked secret in a request body"><br><sub>Secrets masked before they are written</sub></td>
-    <td align="center"><img src="docs/media/ios-analytics.png" width="240" alt="Analytics events checked against a tracking plan"><br><sub>Analytics checked against a tracking plan</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/ios-request-detail.png" width="240" alt="Request detail"><br><sub>Request detail: origin, timing, headers and body</sub></td>
-    <td align="center"><img src="docs/media/ios-storage.png" width="240" alt="Storage and SQL events"><br><sub>UserDefaults and SQL statements</sub></td>
-    <td align="center"><img src="docs/media/ios-flags.png" width="240" alt="Feature flags with local overrides"><br><sub>Feature flags with local overrides</sub></td>
-  </tr>
-</table>
-
-<p align="center"><sub>Screens from the iOS sample app (<a href="samples/ios">samples/ios</a>).</sub></p>
+<p align="center">
+  <img src="docs/media/social-preview.png" alt="StackAudit viewer on iOS: request list, analytics events and feature flags" width="100%">
+</p>
 
 StackAudit is a free, open-source library that records what your app does at runtime and lets you browse it on the device. Shake the phone and see every request, WebSocket frame, stored value, SQL statement, analytics event and feature flag, on Android and iOS, from the same tool.
 
