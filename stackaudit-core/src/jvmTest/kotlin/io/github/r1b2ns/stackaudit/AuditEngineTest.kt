@@ -147,7 +147,7 @@ class AuditEngineTest {
         }
 
     @Test
-    fun showModeKeepsSecretsButExportMasksByDefault() =
+    fun showModeKeepsSecretsInStorageAndExports() =
         runBlocking<Unit> {
             val engine = engine { secrets = Secrets.Show }
             engine.recordHttp(exchange())
@@ -156,12 +156,10 @@ class AuditEngineTest {
             assertEquals("Bearer abcdefghijkl1234", http.requestHeaders.first().value)
             assertTrue("hunter2" in engine.body(http.requestBody!!)!!.decodeToString())
 
-            val masked = engine.exportHar(includeSecrets = false)
-            assertFalse("hunter2" in masked)
-            assertFalse("abcdefghijkl1234" in masked)
-            val revealed = engine.exportHar(includeSecrets = true)
-            assertTrue("hunter2" in revealed)
-            assertFalse("abcdefghijkl1234" in engine.exportJsonl(includeSecrets = false))
+            val har = engine.exportHar(includeSecrets = false)
+            assertTrue("hunter2" in har)
+            assertTrue("abcdefghijkl1234" in har)
+            assertTrue("abcdefghijkl1234" in engine.exportJsonl(includeSecrets = false))
         }
 
     @Test

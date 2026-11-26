@@ -311,7 +311,7 @@ internal class AuditEngine(
             ChainReport(true, rows.size, null)
         }
 
-    private fun scrubberFor(includeSecrets: Boolean): SecretScrubber? = if (includeSecrets) null else exportScrubber
+    private fun scrubberFor(includeSecrets: Boolean): SecretScrubber? = if (includeSecrets || !config.secrets.masksOnWrite) null else exportScrubber
 
     private fun process(item: Pending) {
         if (item is Pending.Capture && ++writesSinceCheck >= LIMIT_CHECK_EVERY) {
