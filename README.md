@@ -587,7 +587,7 @@ swift test
 
 ## Contributing
 
-Issues and pull requests are welcome. If StackAudit helps your team, a star on the repository helps other developers find it.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, how to run the tests and the guidelines. If StackAudit helps your team, a star on the repository helps other developers find it.
 
 ## License
 

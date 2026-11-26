@@ -1,0 +1,92 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Remove tokens, cookies and personal data from anything you paste here.
+        If the bug is a security issue, such as a secret that is not masked, report it privately through [Security Advisories](https://github.com/r1b2ns/stack-audit/security/advisories/new) instead.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - Android
+        - KMP (shared code)
+        - iOS
+        - Flutter
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: StackAudit version
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - HTTP capture
+        - WebSocket capture
+        - Storage (SharedPreferences, UserDefaults, multiplatform-settings)
+        - SQL (Room, SQLDelight, SQLite)
+        - Analytics
+        - Feature flags
+        - Secret masking
+        - Viewer
+        - Export (HAR, JSONL)
+        - Access and handshake tokens
+        - Gradle plugin
+        - Installation or build
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Library you integrate with
+      description: For example OkHttp 4.12, Ktor 3.1, URLSession, package:http 1.2, Room 2.7.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: A minimal snippet or a change to the sample apps helps the most.
+      placeholder: |
+        1. Call `StackAudit.start()` with ...
+        2. Send a request with ...
+        3. Open the viewer and ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or stack trace
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Device or simulator, OS version, Kotlin, AGP, Xcode or Flutter version.
+      placeholder: |
+        - Device: Pixel 8, Android 15
+        - Kotlin 2.2.0, AGP 8.11
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: For problems in the viewer, a screenshot helps.
