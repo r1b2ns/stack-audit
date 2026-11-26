@@ -37,8 +37,37 @@ class AuditEngineTest {
 
     private fun engine(
         context: CoroutineContext = Dispatchers.IO,
+        cipher: BlobCipher = PlainCipher,
         configure: StackAuditConfig.Builder.() -> Unit = {},
-    ): AuditEngine = AuditEngine(StackAuditConfig.build(configure), driver, PlainCipher, context, { clock }).also { engines += it }
+    ): AuditEngine = AuditEngine(StackAuditConfig.build(configure), driver, cipher, context, { clock }).also { engines += it }
+
+    private class KeyedCipher(
+        private val key: Byte,
+        private val throwOnWrongKey: Boolean,
+    ) : BlobCipher {
+        override fun encrypt(plain: ByteArray): ByteArray = byteArrayOf(key) + plain.map { (it.toInt() xor key.toInt()).toByte() }
+
+        override fun decrypt(data: ByteArray): ByteArray {
+            if (data.firstOrNull() != key) {
+                if (throwOnWrongKey) error("wrong key") else return ByteArray(0)
+            }
+            return data.drop(1).map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
+        }
+    }
+
+    private suspend fun bodyAfterKeyChange(throwOnWrongKey: Boolean): Pair<String?, String?> {
+        val first = engine(cipher = KeyedCipher(1, throwOnWrongKey))
+        first.recordHttp(exchange(responseBody = "kept-only-by-the-first-key".encodeToByteArray()))
+        first.recordHttp(exchange())
+        first.flush()
+        val second = engine(cipher = KeyedCipher(2, throwOnWrongKey))
+        val old = (second.httpEvents().first { (it.payload as HttpPayload).responseBody!!.size == 26L }.payload as HttpPayload).responseBody!!
+        clock += 1
+        second.recordHttp(exchange())
+        second.flush()
+        val latest = (second.httpEvents().maxBy { it.timestamp }.payload as HttpPayload)
+        return second.body(old)?.decodeToString() to second.body(latest.responseBody!!)?.decodeToString()
+    }
 
     private fun exchange(
         url: String = "https://api.test/login?token=abcdefghijklmnop&page=1",
@@ -315,6 +344,35 @@ class AuditEngineTest {
             engine.recordWebSocket(frame(WebSocketKind.Open))
             engine.flush()
             assertTrue(engine.summaries(Category.WebSocket, null, 100).first().isEmpty())
+        }
+
+    @Test
+    fun duplicateBodyIsRewrittenWhenTheKeyChangedAndDecryptionThrows() =
+        runBlocking<Unit> {
+            val (old, latest) = bodyAfterKeyChange(throwOnWrongKey = true)
+            assertNull(old)
+            assertEquals("""{"ok":true,"access_token":"••••9999"}""", latest)
+        }
+
+    @Test
+    fun duplicateBodyIsRewrittenWhenTheKeyChangedAndDecryptionIsEmpty() =
+        runBlocking<Unit> {
+            val (old, latest) = bodyAfterKeyChange(throwOnWrongKey = false)
+            assertNull(old)
+            assertEquals("""{"ok":true,"access_token":"••••9999"}""", latest)
+        }
+
+    @Test
+    fun readableDuplicateBodyIsNotRewritten() =
+        runBlocking<Unit> {
+            val engine = engine(cipher = KeyedCipher(1, throwOnWrongKey = true))
+            engine.recordHttp(exchange())
+            engine.recordHttp(exchange())
+            engine.flush()
+            val bodies = engine.httpEvents().map { engine.body((it.payload as HttpPayload).responseBody!!)?.decodeToString() }
+            assertEquals(2, bodies.size)
+            assertEquals(1, bodies.toSet().size)
+            assertNotNull(bodies.first())
         }
 
     @Test

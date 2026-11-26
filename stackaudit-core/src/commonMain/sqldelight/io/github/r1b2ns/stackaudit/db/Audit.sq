@@ -83,6 +83,9 @@ DELETE FROM audit_ref;
 insertBlob:
 INSERT OR IGNORE INTO audit_blob(hash, data, size) VALUES (?, ?, ?);
 
+replaceBlob:
+INSERT OR REPLACE INTO audit_blob(hash, data, size) VALUES (?, ?, ?);
+
 blob:
 SELECT data FROM audit_blob WHERE hash = ?;
 

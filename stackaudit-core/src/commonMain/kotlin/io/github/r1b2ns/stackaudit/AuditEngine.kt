@@ -205,8 +205,16 @@ internal class AuditEngine(
     suspend fun body(ref: BodyRef): ByteArray? =
         withContext(context) {
             val hash = ref.hash ?: return@withContext null
-            queries.blob(hash).executeAsOneOrNull()?.let(cipher::decrypt)
+            queries.blob(hash).executeAsOneOrNull()?.let { open(it, ref.size) }
         }
+
+    private fun open(
+        sealed: ByteArray,
+        size: Long,
+    ): ByteArray? {
+        val plain = runCatching { cipher.decrypt(sealed) }.getOrNull() ?: return null
+        return if (plain.isEmpty() && size > 0) null else plain
+    }
 
     suspend fun exportHar(includeSecrets: Boolean): String {
         val events = withContext(context) { queries.eventsByCategory(Category.Http.wire).executeAsList().map { it.toEvent() } }
@@ -483,7 +491,11 @@ internal class AuditEngine(
     ) {
         val data = stored.data ?: return
         val hash = stored.ref.hash ?: return
-        queries.insertBlob(hash, cipher.encrypt(data), data.size.toLong())
+        val existing = queries.blob(hash).executeAsOneOrNull()
+        when {
+            existing == null -> queries.insertBlob(hash, cipher.encrypt(data), data.size.toLong())
+            open(existing, data.size.toLong())?.contentEquals(data) != true -> queries.replaceBlob(hash, cipher.encrypt(data), data.size.toLong())
+        }
         queries.insertRef(seq, hash)
     }
 
