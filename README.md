@@ -106,9 +106,9 @@ Or add it to `Package.swift`:
 
 The package requires iOS 15 or later.
 
-### Flutter (preview)
+### Flutter (beta)
 
-The Flutter plugin lives in [`flutter/stackaudit`](flutter/stackaudit) and is not on pub.dev yet. Use a git dependency for now:
+The Flutter plugin is in beta: the API may still change between releases. It lives in [`flutter/stackaudit`](flutter/stackaudit) and is not on pub.dev yet. Use a git dependency for now:
 
 ```yaml
 dependencies:
@@ -159,7 +159,7 @@ struct MyApp: App {
 
 URLSession traffic is captured automatically. For sessions with a custom configuration, call `configuration.audited()`. UserDefaults.standard is watched by default; call `StackAudit.watch(_:suiteName:)` for other suites. For WebSockets, use `session.auditedWebSocketTask(with:)`, and for SQLite, `StackAuditSQL.trace(db, name:)`.
 
-### Flutter
+### Flutter (beta)
 
 ```dart
 await StackAudit.start();
