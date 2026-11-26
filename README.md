@@ -116,7 +116,7 @@ https://github.com/r1b2ns/stack-audit
 Or add it to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.2.0")
+.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.3.0")
 ```
 
 The package requires iOS 15 or later.
