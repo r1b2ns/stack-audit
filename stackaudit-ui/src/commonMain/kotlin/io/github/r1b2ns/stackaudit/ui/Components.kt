@@ -23,6 +23,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -633,6 +638,39 @@ internal fun BoxScope.ConfirmDialog(
                     Box(Modifier.weight(1f).fillMaxSize().tap(onClick = onConfirm), contentAlignment = Alignment.Center) {
                         Txt(confirm, size = 17f, color = palette.destructive)
                     }
+                }
+            }
+        }
+    }
+}
+
+internal val TabBarHeight = 53.dp
+
+@Composable
+internal fun <T> TabBar(
+    items: List<T>,
+    selected: T,
+    title: (T) -> String,
+    icon: (T) -> ImageVector,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth().background(palette.card).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))) {
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(palette.separator))
+        Row(Modifier.fillMaxWidth().height(TabBarHeight - 0.5.dp)) {
+            items.forEach { item ->
+                val color = if (item == selected) palette.accent else palette.tertiary
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(item) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Glyph(icon(item), 24.dp, color)
+                    Spacer(Modifier.height(3.dp))
+                    Txt(title(item), size = 10f, weight = FontWeight.Medium, color = color, maxLines = 1)
                 }
             }
         }

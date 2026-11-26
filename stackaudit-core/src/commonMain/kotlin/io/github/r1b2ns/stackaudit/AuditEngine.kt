@@ -13,6 +13,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -42,6 +43,45 @@ internal class AuditEngine(
     private val channel = Channel<Pending>(config.queueCapacity)
     private val dropped = AtomicLong(0)
     private var lastHash: String? = queries.lastHash().executeAsOneOrNull()
+    private val paused =
+        MutableStateFlow(
+            queries.setting(PAUSED_CATEGORIES).executeAsOneOrNull()
+                ?.split(',')
+                ?.filter { it.isNotBlank() }
+                ?.map(Category::fromWire)
+                ?.filter { it != Category.Audit }
+                ?.toSet()
+                .orEmpty(),
+        )
+    val recording: Flow<Set<Category>> = paused.map { config.categories - it }
+
+    private val limit = MutableStateFlow(queries.setting(STORAGE_LIMIT).executeAsOneOrNull()?.toLongOrNull()?.takeIf { it > 0 } ?: config.maxStorage)
+    private var writesSinceCheck = 0
+
+    val storageLimit: Flow<Long> = limit
+
+    fun setStorageLimit(bytes: Long) {
+        if (bytes <= 0 || bytes == limit.value) return
+        limit.value = bytes
+        queries.saveSetting(STORAGE_LIMIT, bytes.toString())
+        recordMeta(MetaKind.StorageLimitChanged, "Storage limit set to $bytes bytes", bytes)
+        offer(Pending.Purge(null))
+    }
+
+    fun isRecording(category: Category): Boolean = category in config.categories && category !in paused.value
+
+    fun setRecording(
+        category: Category,
+        enabled: Boolean,
+    ) {
+        if (category == Category.Audit || category !in config.categories) return
+        val before = paused.value
+        val next = if (enabled) before - category else before + category
+        if (next == before) return
+        paused.value = next
+        queries.saveSetting(PAUSED_CATEGORIES, next.joinToString(",") { it.wire })
+        recordMeta(MetaKind.RecordingChanged, "Recording of ${category.wire} turned ${if (enabled) "on" else "off"}")
+    }
     private val writer: Job = scope.launch { for (item in channel) process(item) }
     private val purger: Job =
         scope.launch {
@@ -52,27 +92,27 @@ internal class AuditEngine(
         }
 
     fun recordHttp(exchange: HttpExchange) {
-        if (Category.Http !in config.categories) return
+        if (!isRecording(Category.Http)) return
         offer(Pending.Http(exchange))
     }
 
     fun recordWebSocket(frame: WebSocketFrame) {
-        if (Category.WebSocket !in config.categories) return
+        if (!isRecording(Category.WebSocket)) return
         offer(Pending.WebSocket(frame))
     }
 
     fun recordStorage(change: StorageChange) {
-        if (Category.Storage !in config.categories) return
+        if (!isRecording(Category.Storage)) return
         offer(Pending.Storage(change))
     }
 
     fun recordDatabase(statement: DatabaseStatement) {
-        if (Category.Database !in config.categories) return
+        if (!isRecording(Category.Database)) return
         offer(Pending.Database(statement))
     }
 
     fun recordAnalytics(call: AnalyticsCall) {
-        if (Category.Analytics !in config.categories) return
+        if (!isRecording(Category.Analytics)) return
         offer(Pending.Analytics(call))
     }
 
@@ -80,7 +120,7 @@ internal class AuditEngine(
         flag: FlagPayload,
         timestamp: Long,
     ) {
-        if (Category.Flag !in config.categories) return
+        if (!isRecording(Category.Flag)) return
         offer(Pending.Flag(flag, timestamp))
     }
 
@@ -161,6 +201,13 @@ internal class AuditEngine(
     suspend fun clear() {
         val done = CompletableDeferred<Unit>()
         channel.send(Pending.Clear(done))
+        done.await()
+    }
+
+    suspend fun delete(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val done = CompletableDeferred<Unit>()
+        channel.send(Pending.Delete(ids.toSet(), done))
         done.await()
     }
 
@@ -253,10 +300,11 @@ internal class AuditEngine(
     suspend fun verify(): ChainReport =
         withContext(context) {
             val rows = queries.allEvents().executeAsList()
+            val gaps = queries.gaps().executeAsList().toSet()
             var previous: String? = null
             rows.forEachIndexed { index, row ->
                 val expected = chainHash(row.prev_hash, row.id, row.timestamp, row.duration, row.category, row.source, row.trace_id, row.title, row.payload)
-                val linked = index == 0 || row.prev_hash == previous
+                val linked = index == 0 || row.prev_hash == previous || row.prev_hash in gaps
                 if (expected != row.hash || !linked) return@withContext ChainReport(false, index, row.id)
                 previous = row.hash
             }
@@ -266,6 +314,10 @@ internal class AuditEngine(
     private fun scrubberFor(includeSecrets: Boolean): SecretScrubber? = if (includeSecrets) null else exportScrubber
 
     private fun process(item: Pending) {
+        if (item is Pending.Capture && ++writesSinceCheck >= LIMIT_CHECK_EVERY) {
+            writesSinceCheck = 0
+            safely { if (storageBytes() > limit.value) purge() }
+        }
         val lost = dropped.exchange(0)
         if (lost > 0) safely { writeMeta(MetaPayload(MetaKind.Dropped, "$lost events dropped", lost), now()) }
         when (item) {
@@ -282,6 +334,10 @@ internal class AuditEngine(
             }
             is Pending.Clear -> {
                 safely { clearAll() }
+                item.done.complete(Unit)
+            }
+            is Pending.Delete -> {
+                safely { deleteEvents(item.ids) }
                 item.done.complete(Unit)
             }
             is Pending.Barrier -> item.done.complete(Unit)
@@ -548,7 +604,7 @@ internal class AuditEngine(
         val cutoff = now() - config.retention.inWholeMilliseconds
         queries.lastSeqBefore(cutoff).executeAsOne().MAX?.let(::deleteThrough)
         var rounds = 0
-        while (storageBytes() > config.maxStorage && rounds++ < MAX_PURGE_ROUNDS) {
+        while (storageBytes() > limit.value && rounds++ < MAX_PURGE_ROUNDS) {
             val count = queries.countEvents().executeAsOne()
             if (count == 0L) break
             deleteThrough(queries.seqAtOffset(maxOf(1, count / 10) - 1).executeAsOne())
@@ -587,8 +643,29 @@ internal class AuditEngine(
             queries.deleteAllSecrets()
             queries.deleteAllEvents()
             queries.deleteAllBlobs()
+            queries.deleteAllGaps()
         }
         writeMeta(MetaPayload(MetaKind.Cleared, "$count events cleared", count), now())
+    }
+
+    private fun deleteEvents(ids: Set<String>) {
+        var removed = 0L
+        ids.chunked(DELETE_CHUNK).forEach { chunk ->
+            database.transaction {
+                val rows = queries.eventsByIds(chunk).executeAsList()
+                if (rows.isEmpty()) return@transaction
+                val seqs = rows.map { it.seq }
+                rows.forEach { queries.insertGap(it.hash) }
+                queries.deleteHttpBySeq(seqs)
+                queries.deleteRefsBySeq(seqs)
+                queries.deleteSecretsBySeq(seqs)
+                queries.deleteEventsBySeq(seqs)
+                removed += rows.size
+            }
+        }
+        if (removed == 0L) return
+        queries.deleteOrphanBlobs()
+        writeMeta(MetaPayload(MetaKind.Deleted, "$removed events deleted", removed), now())
     }
 
     private fun Audit_event.toEvent(): AuditEvent =
@@ -611,23 +688,27 @@ internal class AuditEngine(
     )
 
     private sealed interface Pending {
-        class Http(val exchange: HttpExchange) : Pending
+        sealed interface Capture : Pending
 
-        class WebSocket(val frame: WebSocketFrame) : Pending
+        class Http(val exchange: HttpExchange) : Capture
 
-        class Storage(val change: StorageChange) : Pending
+        class WebSocket(val frame: WebSocketFrame) : Capture
 
-        class Analytics(val call: AnalyticsCall) : Pending
+        class Storage(val change: StorageChange) : Capture
 
-        class Flag(val flag: FlagPayload, val timestamp: Long) : Pending
+        class Analytics(val call: AnalyticsCall) : Capture
 
-        class Database(val statement: DatabaseStatement) : Pending
+        class Flag(val flag: FlagPayload, val timestamp: Long) : Capture
+
+        class Database(val statement: DatabaseStatement) : Capture
 
         class Meta(val payload: MetaPayload, val timestamp: Long) : Pending
 
         class Purge(val done: CompletableDeferred<Unit>?) : Pending
 
         class Clear(val done: CompletableDeferred<Unit>) : Pending
+
+        class Delete(val ids: Set<String>, val done: CompletableDeferred<Unit>) : Pending
 
         class Barrier(val done: CompletableDeferred<Unit>) : Pending
     }
@@ -637,6 +718,10 @@ internal class AuditEngine(
         const val BINARY = "application/octet-stream"
         const val TITLE_SQL = 80
         const val DEVICE_ID = "device_id"
+        const val PAUSED_CATEGORIES = "paused_categories"
+        const val STORAGE_LIMIT = "storage_limit"
+        const val LIMIT_CHECK_EVERY = 50
+        const val DELETE_CHUNK = 400
     }
 }
 

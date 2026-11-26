@@ -235,6 +235,15 @@ public enum class MetaKind {
     @SerialName("cleared")
     Cleared,
 
+    @SerialName("deleted")
+    Deleted,
+
+    @SerialName("recording_changed")
+    RecordingChanged,
+
+    @SerialName("storage_limit_changed")
+    StorageLimitChanged,
+
     @SerialName("exported")
     Exported,
 

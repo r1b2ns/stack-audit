@@ -69,7 +69,10 @@ private suspend fun loadBody(ref: BodyRef?): LoadedBody {
 }
 
 @Composable
-internal fun EventDetailScreen(summary: AuditEventSummary) {
+internal fun EventDetailScreen(
+    summary: AuditEventSummary,
+    back: String,
+) {
     val navigator = LocalNavigator.current
     val copy = LocalCopy.current
     var reveal by remember(summary.id) { mutableStateOf(false) }
@@ -94,8 +97,11 @@ internal fun EventDetailScreen(summary: AuditEventSummary) {
         NavBar(
             title = "Event",
             large = false,
-            leading = { BackButton("Audit") { navigator.pop() } },
-            trailing = { BarIcon(Icons.Share, enabled = detail != null) { navigator.present(SheetRoute.Event(summary)) } },
+            leading = { BackButton(back) { navigator.pop() } },
+            trailing = {
+                BarIcon(Icons.Trash, enabled = detail != null) { navigator.confirmDelete(listOf(summary)) { navigator.pop() } }
+                BarIcon(Icons.Share, enabled = detail != null) { navigator.present(SheetRoute.Event(summary)) }
+            },
         )
         val current = detail
         if (current == null) {

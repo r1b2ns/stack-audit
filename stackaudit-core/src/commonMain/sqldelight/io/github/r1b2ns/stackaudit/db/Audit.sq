@@ -61,6 +61,10 @@ CREATE TABLE audit_secret (
     data BLOB NOT NULL
 );
 
+CREATE TABLE audit_gap (
+    hash TEXT NOT NULL PRIMARY KEY
+);
+
 insertEvent:
 INSERT INTO audit_event(id, timestamp, duration, category, source, trace_id, title, payload, size, prev_hash, hash)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
@@ -180,3 +184,27 @@ DELETE FROM audit_secret WHERE event_seq <= ?;
 
 deleteAllSecrets:
 DELETE FROM audit_secret;
+
+eventsByIds:
+SELECT seq, hash FROM audit_event WHERE id IN ?;
+
+deleteEventsBySeq:
+DELETE FROM audit_event WHERE seq IN ?;
+
+deleteHttpBySeq:
+DELETE FROM audit_http WHERE event_seq IN ?;
+
+deleteRefsBySeq:
+DELETE FROM audit_ref WHERE event_seq IN ?;
+
+deleteSecretsBySeq:
+DELETE FROM audit_secret WHERE event_seq IN ?;
+
+insertGap:
+INSERT OR IGNORE INTO audit_gap(hash) VALUES (?);
+
+gaps:
+SELECT hash FROM audit_gap;
+
+deleteAllGaps:
+DELETE FROM audit_gap;

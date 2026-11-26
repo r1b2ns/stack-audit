@@ -286,6 +286,158 @@ class AuditEngineTest {
         }
 
     @Test
+    fun deleteRemovesOnlyTheChosenEventsAndLeavesAMarker() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(3) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            val before = engine.summaries(Category.Http, null, 100).first()
+            val target = before.first { "/item/1" in it.title }
+            engine.delete(listOf(target.id, "missing"))
+            val after = engine.summaries(Category.Http, null, 100).first()
+            assertEquals(before.map { it.id } - target.id, after.map { it.id })
+            assertNull(engine.event(target.id))
+            assertEquals(listOf("1 events deleted"), engine.summaries(Category.Audit, null, 100).first().map { it.title }.filter { "deleted" in it })
+        }
+
+    @Test
+    fun chainStaysValidAfterDeletingEventsInTheMiddleAndAtTheEnd() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(4) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            val events = engine.summaries(Category.Http, null, 100).first()
+            engine.delete(listOf(events.first { "/item/1" in it.title }.id, events.first { "/item/2" in it.title }.id))
+            assertTrue(engine.verify().valid)
+            engine.delete(listOf(engine.summaries(null, null, 1).first().single().id))
+            engine.recordHttp(exchange())
+            engine.flush()
+            assertTrue(engine.verify().valid)
+        }
+
+    @Test
+    fun deletingEventsStillDetectsTampering() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(3) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            engine.delete(listOf(engine.summaries(Category.Http, null, 100).first().first { "/item/1" in it.title }.id))
+            driver.execute(null, "UPDATE audit_event SET title = 'forged' WHERE seq = 3", 0)
+            assertFalse(engine.verify().valid)
+        }
+
+    @Test
+    fun deleteDropsBlobsNoLongerReferenced() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.recordHttp(exchange(responseBody = "only-here".encodeToByteArray()))
+            engine.flush()
+            val event = engine.httpEvents().single()
+            val ref = (event.payload as HttpPayload).responseBody!!
+            engine.delete(listOf(event.id))
+            assertNull(engine.body(ref))
+        }
+
+    @Test
+    fun clearAlsoForgetsDeletedGaps() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(2) { engine.recordHttp(exchange()) }
+            engine.flush()
+            engine.delete(listOf(engine.summaries(Category.Http, null, 100).first().first().id))
+            engine.clear()
+            val gaps =
+                driver.executeQuery(null, "SELECT COUNT(*) FROM audit_gap", { cursor ->
+                    cursor.next()
+                    app.cash.sqldelight.db.QueryResult.Value(cursor.getLong(0))
+                }, 0).value
+            assertEquals(0L, gaps)
+            assertTrue(engine.verify().valid)
+        }
+
+    @Test
+    fun overridesSurviveARestartOfTheEngine() {
+        val first = engine()
+        val flags = StackAuditFlags({ null }, { clock })
+        flags.attach(first.overrideStore)
+        flags.override("checkout", FlagValue.Bool(true))
+        flags.override("banner", FlagValue.Text("blue"))
+        val restarted = StackAuditFlags({ null }, { clock })
+        restarted.attach(engine().overrideStore)
+        val audited = restarted.wrap({ null }, "remote")
+        assertTrue(audited.bool("checkout", default = false))
+        assertEquals("blue", audited.string("banner", default = "red"))
+        assertEquals(FlagSource.Override, restarted.states.value.getValue("checkout").source)
+    }
+
+    @Test
+    fun pausedCategoryIsNotRecordedAndTheChangeIsLogged() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.setRecording(Category.Http, enabled = false)
+            engine.recordHttp(exchange())
+            engine.recordAnalytics(AnalyticsCall("firebase", "login", emptyMap(), clock, ValidationStatus.NotChecked, emptyList()))
+            engine.flush()
+            assertTrue(engine.summaries(Category.Http, null, 100).first().isEmpty())
+            assertEquals(1, engine.summaries(Category.Analytics, null, 100).first().size)
+            assertEquals(setOf(Category.WebSocket, Category.Storage, Category.Database, Category.Analytics, Category.Flag, Category.Audit), engine.recording.first())
+            assertTrue(engine.summaries(Category.Audit, null, 100).first().any { it.title == "Recording of http turned off" })
+        }
+
+    @Test
+    fun pausedCategoriesSurviveARestart() =
+        runBlocking<Unit> {
+            engine().setRecording(Category.Storage, enabled = false)
+            val restarted = engine()
+            assertFalse(restarted.isRecording(Category.Storage))
+            restarted.setRecording(Category.Storage, enabled = true)
+            assertTrue(engine().isRecording(Category.Storage))
+        }
+
+    @Test
+    fun auditAndCategoriesOffInTheConfigCannotBeToggled() =
+        runBlocking<Unit> {
+            val engine = engine { categories = setOf(Category.Http, Category.Audit) }
+            engine.setRecording(Category.Audit, enabled = false)
+            engine.setRecording(Category.Storage, enabled = true)
+            assertTrue(engine.isRecording(Category.Audit))
+            assertFalse(engine.isRecording(Category.Storage))
+            assertEquals(setOf(Category.Http, Category.Audit), engine.recording.first())
+        }
+
+    @Test
+    fun chosenStorageLimitPurgesTheOldestEventsAndSurvivesARestart() =
+        runBlocking<Unit> {
+            val engine = engine()
+            repeat(40) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            engine.setStorageLimit(4_000)
+            engine.flush()
+            val remaining = engine.summaries(Category.Http, null, 100).first()
+            assertTrue(remaining.size in 1 until 40)
+            assertTrue(remaining.none { it.title.contains("/item/0 ") })
+            assertTrue(engine.verify().valid)
+            assertEquals(4_000L, engine().storageLimit.first())
+        }
+
+    @Test
+    fun storageLimitIsEnforcedWhileRecording() =
+        runBlocking<Unit> {
+            val engine = engine()
+            engine.setStorageLimit(4_000)
+            engine.flush()
+            repeat(120) { engine.recordHttp(exchange(url = "https://api.test/item/$it")) }
+            engine.flush()
+            assertTrue(engine.summaries(Category.Http, null, 200).first().size < 120)
+        }
+
+    @Test
+    fun storageLimitDefaultsToTheConfig() =
+        runBlocking<Unit> {
+            assertEquals(123_456L, engine { maxStorage = 123_456 }.storageLimit.first())
+        }
+
+    @Test
     fun searchFiltersByTitle() =
         runBlocking<Unit> {
             val engine = engine()
