@@ -181,6 +181,29 @@ await StackAudit.start();
 final client = StackAuditHttpClient(http.Client());
 ```
 
+### Analytics and feature flags
+
+These two are not captured automatically: StackAudit cannot know which analytics SDK or remote config your app uses, so you route them through it.
+
+```kotlin
+StackAudit.analytics.plan = TrackingPlan.fromJson(trackingPlanJson)
+val tracker = StackAudit.analytics.wrap(AnalyticsTracker { name, params -> firebase.logEvent(name, params) }, provider = "firebase")
+tracker.track("purchase", mapOf("value" to 49.9, "currency" to "BRL"))
+
+val flags = StackAudit.flags.wrap(FlagProvider { key -> remoteConfig.flagValue(key) }, name = "remote_config")
+val newCheckout = flags.bool("new_checkout", default = false)
+```
+
+```swift
+try? StackAuditAnalytics.setTrackingPlan(json: trackingPlanJSON)
+StackAuditAnalytics.record(provider: "firebase", name: "purchase", params: ["value": 49.9, "currency": "BRL"])
+
+let flags = StackAuditFlags(provider: RemoteConfigFlags(), name: "remote_config")
+let newCheckout = flags.bool("new_checkout", default: false)
+```
+
+Events are checked against the tracking plan, and flags can be overridden on the device from the viewer. See **[Analytics and feature flags](docs/analytics-and-flags.md)** for the full setup on Android, KMP, iOS and Flutter, the tracking plan format and how flag values are resolved.
+
 ## Configuration
 
 ```kotlin
