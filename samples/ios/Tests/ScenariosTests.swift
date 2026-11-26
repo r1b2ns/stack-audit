@@ -20,4 +20,10 @@ final class ScenariosTests: XCTestCase {
         XCTAssertNotNil(login?.headers["Authorization"])
         XCTAssertTrue(login?.body?.contains("password") == true)
     }
+
+    func testPlainWebSocketScenarioUsesSecureSocket() {
+        let plain = Scenarios.all.filter { $0.client == .plainWebSocket }
+        XCTAssertEqual(plain.count, 1)
+        XCTAssertTrue(plain.allSatisfy { $0.url.hasPrefix("wss://") && $0.method == "WS" })
+    }
 }

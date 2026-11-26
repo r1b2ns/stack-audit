@@ -8,6 +8,7 @@ enum DemoClient: String, CaseIterable {
     case alamofire = "Alamofire"
     case pinned = "Alamofire + pinning"
     case webSocket = "URLSession WebSocket"
+    case plainWebSocket = "URLSessionWebSocketTask"
     case userDefaults = "UserDefaults"
     case sqlite = "SQLite"
     case analytics = "Analytics"
@@ -56,6 +57,7 @@ enum Scenarios {
         ),
         Scenario(title: "Pinning rejects (expected failure)", client: .pinned, method: "GET", url: "\(bin)/get?source=pinning"),
         Scenario(title: "WebSocket echo", client: .webSocket, method: "WS", url: "wss://echo.websocket.org/?token=abcdefghijklmnop"),
+        Scenario(title: "WebSocket echo (plain task)", client: .plainWebSocket, method: "WS", url: "wss://echo.websocket.org/?source=plain"),
         Scenario(title: "UserDefaults write", client: .userDefaults, method: "DEFAULTS", url: "local://standard"),
         Scenario(title: "SQLite statements", client: .sqlite, method: "SQL", url: "local://demo.sqlite"),
         Scenario(title: "Analytics events", client: .analytics, method: "EVENT", url: "local://analytics"),
@@ -101,6 +103,8 @@ final class DemoRunner {
             return await run(pinned, request)
         case .webSocket:
             return await echo(url)
+        case .plainWebSocket:
+            return await plainEcho(url)
         case .userDefaults:
             let defaults = UserDefaults.standard
             defaults.set(defaults.string(forKey: "theme") == "dark" ? "light" : "dark", forKey: "theme")
@@ -151,6 +155,25 @@ final class DemoRunner {
             try await socket.send(.data(Data([1, 2, 3])))
             _ = try await socket.receive()
             _ = try await socket.receive()
+            return "echo received"
+        } catch {
+            return "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func plainEcho(_ url: URL) async -> String {
+        let task = session.webSocketTask(with: url)
+        task.resume()
+        defer { task.cancel(with: .normalClosure, reason: nil) }
+        do {
+            _ = try await task.receive()
+            try await task.send(.string(#"{"type":"chat","text":"plain","token":"abcdefghijkl1234"}"#))
+            _ = try await task.receive()
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                task.sendPing { error in
+                    if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                }
+            }
             return "echo received"
         } catch {
             return "Failed: \(error.localizedDescription)"
