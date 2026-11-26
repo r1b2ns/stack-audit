@@ -42,7 +42,7 @@ public class BridgeOptions {
     public var sessionTtlSeconds: Long = 1800
     public var retentionSeconds: Long = 7 * 24 * 3600
     public var maxBodySize: Long = 1024L * 1024L
-    public var maxStorage: Long = 100L * 1024L * 1024L
+    public var maxStorage: Long = 200L * 1024L * 1024L
 }
 
 public object StackAuditBridge {

@@ -15,7 +15,7 @@ class ConfigTest {
         assertEquals(Access.Open, config.access)
         assertEquals(7.days, config.retention)
         assertEquals(1024L * 1024L, config.maxBodySize)
-        assertEquals(100L * 1024L * 1024L, config.maxStorage)
+        assertEquals(200L * 1024L * 1024L, config.maxStorage)
         assertEquals(Category.entries.toSet(), config.categories)
     }
 

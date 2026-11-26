@@ -102,7 +102,7 @@ public class StackAuditConfig internal constructor(
         public var access: Access = Access.Open
         public var retention: Duration = 7.days
         public var maxBodySize: Long = 1024L * 1024L
-        public var maxStorage: Long = 100L * 1024L * 1024L
+        public var maxStorage: Long = 200L * 1024L * 1024L
         public var categories: Set<Category> = Category.entries.toSet()
         public var queueCapacity: Int = 1000
 

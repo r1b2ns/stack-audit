@@ -25,7 +25,7 @@ public enum StackAudit {
         public var network: Network = .automatic
         public var retention: TimeInterval = 7 * 24 * 3600
         public var maxBodySize: Int64 = 1024 * 1024
-        public var maxStorage: Int64 = 100 * 1024 * 1024
+        public var maxStorage: Int64 = 200 * 1024 * 1024
         public var shakeToOpen: Bool = true
         public var watchStandardUserDefaults: Bool = true
 

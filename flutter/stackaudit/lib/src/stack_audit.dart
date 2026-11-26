@@ -18,7 +18,7 @@ class StackAuditOptions {
     this.sessionTtl = const Duration(minutes: 30),
     this.retention = const Duration(days: 7),
     this.maxBodySize = 1024 * 1024,
-    this.maxStorage = 100 * 1024 * 1024,
+    this.maxStorage = 200 * 1024 * 1024,
     this.shakeToOpen = true,
     this.captureNativeNetwork = true,
   });
