@@ -49,7 +49,7 @@ That is the whole setup on Android. On iOS, URLSession traffic is captured with 
 | Source | Android | iOS | KMP | Flutter |
 |---|---|---|---|---|
 | REST | OkHttp | URLSession | Ktor | `package:http` |
-| WebSocket | OkHttp, Ktor | URLSessionWebSocketTask | Ktor | |
+| WebSocket | OkHttp, Ktor | URLSessionWebSocketTask (automatic) | Ktor | |
 | Key-value storage | SharedPreferences | UserDefaults | multiplatform-settings | |
 | SQL | Room, SQLDelight | SQLite | SQLDelight | |
 | Analytics events | ✓ | ✓ | ✓ | ✓ |
@@ -172,7 +172,9 @@ struct MyApp: App {
 }
 ```
 
-URLSession traffic is captured automatically. For sessions with a custom configuration, call `configuration.audited()`. UserDefaults.standard is watched by default; call `StackAudit.watch(_:suiteName:)` for other suites. For WebSockets, use `session.auditedWebSocketTask(with:)`, and for SQLite, `StackAuditSQL.trace(db, name:)`.
+URLSession traffic and `URLSessionWebSocketTask` frames (open, sent, received, ping/pong, close and failures) are captured automatically. For sessions with a custom configuration, call `configuration.audited()`. UserDefaults.standard is watched by default; call `StackAudit.watch(_:suiteName:)` for other suites. For SQLite, use `StackAuditSQL.trace(db, name:)`.
+
+With `network = .manual`, nothing is hooked. Opt in per session with `configuration.audited()`, and per socket with `session.auditedWebSocketTask(with:)`, `auditedWebSocketTask(with:protocols:)` or `StackAuditWebSocket(task:)`. A socket wrapped this way is recorded once, even in `.automatic` mode.
 
 ### Flutter (beta)
 
