@@ -2,8 +2,8 @@
 import Foundation
 import PackageDescription
 
-let releaseVersion = "0.4.0"
-let releaseChecksum = "f9b2e215c557acc0a04492926b8fa1253a3be1305b71b7a7f1d8ca5bc8c50369"
+let releaseVersion = "0.4.1"
+let releaseChecksum = "4f3f1082bf85a2be78020cf78cebe7a2877628548e4dbdf0c49f83071b5ab4ae"
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
 let localKit = "stackaudit-apple/build/XCFrameworks/debug/StackAuditKit.xcframework"
