@@ -45,7 +45,7 @@ internal actual fun platformCipher(): BlobCipher = StackAuditIos.cipher ?: Plain
 internal actual fun isDebuggableBuild(): Boolean = Platform.isDebugBinary
 
 internal actual fun platformLog(message: String) {
-    NSLog("%@", message)
+    NSLog(message.replace("%", "%%"))
 }
 
 private const val DATABASE = "stackaudit.db"
