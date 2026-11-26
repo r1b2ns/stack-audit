@@ -14,12 +14,18 @@ extension URLSessionWebSocketTask: WebSocketTasking {}
 
 public final class StackAuditWebSocket {
     public let task: WebSocketTasking
-    private let connectionId = UUID().uuidString
+    private let connectionId: String
     private let url: String
 
     public init(task: WebSocketTasking) {
         self.task = task
         url = task.originalRequest?.url?.absoluteString ?? ""
+        if let native = task as? URLSessionWebSocketTask {
+            WebSocketCapture.markWrapped(native)
+            connectionId = WebSocketCapture.connectionId(for: native)
+        } else {
+            connectionId = UUID().uuidString
+        }
     }
 
     public func resume() {
@@ -68,7 +74,7 @@ public final class StackAuditWebSocket {
     }
 
     public func cancel(with closeCode: URLSessionWebSocketTask.CloseCode = .normalClosure, reason: Data? = nil) {
-        record("closed", code: closeCode.rawValue, reason: reason.map { String(decoding: $0, as: UTF8.self) })
+        record("closed", code: closeCode.rawValue, reason: reason)
         task.cancel(with: closeCode, reason: reason)
     }
 
@@ -76,28 +82,18 @@ public final class StackAuditWebSocket {
         _ kind: String,
         _ message: URLSessionWebSocketTask.Message? = nil,
         code: Int = 0,
-        reason: String? = nil,
+        reason: Data? = nil,
         error: Error? = nil
     ) {
-        guard StackAuditBridge.shared.isCapturingWebSockets else { return }
-        var data: Data?
-        var isText = true
-        switch message {
-        case let .string(text): data = Data(text.utf8)
-        case let .data(bytes): data = bytes; isText = false
-        default: break
-        }
-        StackAuditBridge.shared.recordWebSocket(
+        WebSocketRecorder.record(
             source: "urlsession",
             connectionId: connectionId,
             url: url,
             kind: kind,
-            data: data,
-            isText: isText,
-            code: Int32(code),
+            message: message,
+            code: code,
             reason: reason,
-            error: error.map { "\(type(of: $0)): \($0.localizedDescription)" },
-            timestampMs: Int64(Date().timeIntervalSince1970 * 1000)
+            error: error
         )
     }
 }
@@ -105,6 +101,10 @@ public final class StackAuditWebSocket {
 public extension URLSession {
     func auditedWebSocketTask(with url: URL) -> StackAuditWebSocket {
         StackAuditWebSocket(task: webSocketTask(with: url))
+    }
+
+    func auditedWebSocketTask(with url: URL, protocols: [String]) -> StackAuditWebSocket {
+        StackAuditWebSocket(task: webSocketTask(with: url, protocols: protocols))
     }
 
     func auditedWebSocketTask(with request: URLRequest) -> StackAuditWebSocket {

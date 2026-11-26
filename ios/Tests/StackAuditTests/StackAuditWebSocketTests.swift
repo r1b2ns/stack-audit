@@ -56,6 +56,36 @@ final class StackAuditWebSocketTests: XCTestCase {
         XCTAssertTrue(log.contains("token=••••mnop"), log)
     }
 
+    func testAuditedTaskWithProtocolsNegotiatesAndRecords() async throws {
+        let server = try LocalWebSocketServer()
+        let url = try await server.start()
+        let session = URLSession(configuration: .ephemeral)
+        defer {
+            session.invalidateAndCancel()
+            server.stop()
+        }
+        let socket = session.auditedWebSocketTask(with: url, protocols: ["chat.v2", "chat.v1"])
+        let native = try XCTUnwrap(socket.task as? URLSessionWebSocketTask)
+        XCTAssertTrue(WebSocketCapture.isWrapped(native))
+        XCTAssertEqual(native.originalRequest?.value(forHTTPHeaderField: "Sec-WebSocket-Protocol"), "chat.v2, chat.v1")
+
+        socket.resume()
+        try await socket.send(.string("hello"))
+        _ = try await socket.receive()
+        socket.cancel()
+
+        XCTAssertEqual((native.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Sec-WebSocket-Protocol"), "chat.v2")
+        let frames = try await FrameLog.frames()
+        XCTAssertEqual(frames.map(\.source), Array(repeating: "urlsession", count: 4))
+        XCTAssertEqual(Set(frames.map(\.connectionId)), [WebSocketCapture.connectionId(for: native)])
+    }
+
+    func testFakeTasksAreNotMarkedAsWrapped() {
+        let fake = FakeWebSocketTask()
+        _ = StackAuditWebSocket(task: fake)
+        XCTAssertFalse(WebSocketCapture.isWrapped(fake))
+    }
+
     func testRecordsReceiveFailures() async throws {
         let fake = FakeWebSocketTask()
         fake.inbox = [.failure(URLError(.networkConnectionLost))]

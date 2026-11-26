@@ -58,12 +58,20 @@ public enum StackAudit {
         }
         shakeToOpen = configuration.shakeToOpen
         ShakeToOpen.install()
-        if configuration.network == .automatic {
-            NetworkCapture.enable()
-        }
+        installCaptures(for: configuration.network)
         if configuration.watchStandardUserDefaults {
             watch(UserDefaults.standard)
         }
+    }
+
+    static func installCaptures(
+        for network: Network,
+        http: () -> Void = NetworkCapture.enable,
+        webSocket: () -> Void = WebSocketCapture.enable
+    ) {
+        guard network == .automatic else { return }
+        http()
+        webSocket()
     }
 
     private static var watchers: [String: UserDefaultsWatcher] = [:]
