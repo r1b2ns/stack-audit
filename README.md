@@ -41,7 +41,7 @@ On iOS, that one call also captures URLSession traffic with no extra code. On An
 
 | Source | Android | iOS | KMP | Flutter |
 |---|---|---|---|---|
-| REST | OkHttp | URLSession | Ktor | `package:http` |
+| REST | OkHttp | URLSession | Ktor | `package:http`, Dio |
 | WebSocket | OkHttp, Ktor | URLSessionWebSocketTask (automatic) | Ktor | |
 | Key-value storage | SharedPreferences | UserDefaults | multiplatform-settings | |
 | SQL | Room, SQLDelight | SQLite | SQLDelight | |
@@ -288,6 +288,17 @@ final client = StackAuditHttpClient(http.Client());
 ```
 
 `StackAuditHttpClient` records every request made through it. Pass it to the packages that accept an `http.Client`. Shake the device or call `StackAudit.show()` to open the viewer.
+
+With [Dio](https://pub.dev/packages/dio), add the interceptor instead:
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:stackaudit/dio.dart';
+
+final dio = Dio()..interceptors.add(StackAuditDioInterceptor());
+```
+
+Add it after interceptors that change the request, such as the one that sets the auth header, so the recorded request is the one that was sent. Pass `source: 'api'` to tell several clients apart in the viewer. For `FormData`, the text fields are recorded and files show only their name. Responses read as a stream (`ResponseType.stream`) are recorded without a body.
 
 Key-value storage is not hooked automatically. Report changes yourself:
 
