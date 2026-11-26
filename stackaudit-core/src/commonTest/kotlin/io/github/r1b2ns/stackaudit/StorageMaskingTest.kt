@@ -15,6 +15,16 @@ class StorageMaskingTest {
     }
 
     @Test
+    fun masksValuesOfSecretHeaderNames() {
+        assertEquals("••••1234", scrubber.storageValue("Authorization", "Bearer abcdefghijkl1234"))
+        assertEquals("••••1234", scrubber.storageValue("cookie", "session=abcd1234"))
+        assertEquals(
+            listOf("••••1234", "7"),
+            scrubber.sqlArguments("UPDATE session SET cookie = ? WHERE id = ?", listOf("session=abcd1234", "7")),
+        )
+    }
+
+    @Test
     fun masksSecretsInsideJsonValues() {
         assertEquals("""{"token":"••••","id":1}""", scrubber.storageValue("session", """{"token":"abc","id":1}"""))
     }

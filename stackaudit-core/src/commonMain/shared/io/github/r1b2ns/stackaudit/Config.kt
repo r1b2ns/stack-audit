@@ -49,7 +49,7 @@ public class SecretRules internal constructor(
 
     internal fun isSecretField(name: String): Boolean {
         val key = normalize(name)
-        return key in fields || key in queryParams || matcher?.invoke(name.lowercase()) == true
+        return key in fields || key in queryParams || key in headers || matcher?.invoke(name.lowercase()) == true
     }
 
     public companion object {

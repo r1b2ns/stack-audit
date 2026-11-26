@@ -108,6 +108,48 @@ class SecretScrubberTest {
     }
 
     @Test
+    fun masksSecretHeaderNamesInJsonBodies() {
+        assertEquals(
+            """{"Authorization":"••••1234","Cookie":"••••1234","X-Api-Key":"••••1234","Proxy-Authorization":"••••1234","set_cookie":"••••1234"}""",
+            scrubber.json(
+                """{"Authorization":"Bearer abcdefghijkl1234","Cookie":"session=abcd1234","X-Api-Key":"key-abcdef-1234","Proxy-Authorization":"Basic abcdef1234","set_cookie":"id=abcdefgh1234"}""",
+            ),
+        )
+    }
+
+    @Test
+    fun masksEchoedRequestHeadersInResponseBody() {
+        val echoed =
+            """{"args":{},"headers":{"Accept":"*/*","Authorization":"Bearer abcdefghijkl1234","Host":"httpbin.org"},"url":"https://httpbin.org/post"}"""
+        assertEquals(
+            """{"args":{},"headers":{"Accept":"*/*","Authorization":"••••1234","Host":"httpbin.org"},"url":"https://httpbin.org/post"}""",
+            scrubber.body(echoed, "application/json"),
+        )
+    }
+
+    @Test
+    fun masksSecretHeaderNamesInFormAndQuery() {
+        assertEquals("user=ana&cookie=••••", scrubber.form("user=ana&cookie=a%3Db"))
+        assertEquals(
+            "https://api.test/a?x_api_key=••••1234&page=1",
+            scrubber.url("https://api.test/a?x_api_key=key-abcdef-1234&page=1"),
+        )
+    }
+
+    @Test
+    fun allowedHeaderNameIsNotMaskedInBodies() {
+        val custom = SecretScrubber(SecretRules.build { allow("Cookie") })
+        assertEquals("""{"cookie":"a=b"}""", custom.json("""{"cookie":"a=b"}"""))
+        assertEquals("""{"authorization":"••••1234"}""", custom.json("""{"authorization":"Bearer abcdefghijkl1234"}"""))
+    }
+
+    @Test
+    fun customHeaderNameIsMaskedInBodies() {
+        val custom = SecretScrubber(SecretRules.build { header("X-Session") })
+        assertEquals("""{"x-session":"••••"}""", custom.json("""{"x-session":"abc"}"""))
+    }
+
+    @Test
     fun bodyDispatchesOnContentType() {
         assertEquals("password=••••", scrubber.body("password=abc", "application/x-www-form-urlencoded"))
         assertEquals("""{"token":"••••"}""", scrubber.body("""{"token":"abc"}""", "application/json; charset=utf-8"))
