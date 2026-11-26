@@ -73,15 +73,15 @@ Requirements:
 
 ```kotlin
 dependencies {
-    debugImplementation("io.github.r1b2ns:stackaudit-android:0.4.0")
-    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.4.0")
-    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.4.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-android:0.4.1")
+    debugImplementation("io.github.r1b2ns:stackaudit-ui:0.4.1")
+    releaseImplementation("io.github.r1b2ns:stackaudit-noop:0.4.1")
 
-    debugImplementation("io.github.r1b2ns:stackaudit-ktor:0.4.0")
-    releaseImplementation("io.github.r1b2ns:stackaudit-ktor-noop:0.4.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-ktor:0.4.1")
+    releaseImplementation("io.github.r1b2ns:stackaudit-ktor-noop:0.4.1")
 
-    debugImplementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.0")
-    releaseImplementation("io.github.r1b2ns:stackaudit-sqldelight-noop:0.4.0")
+    debugImplementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.1")
+    releaseImplementation("io.github.r1b2ns:stackaudit-sqldelight-noop:0.4.1")
 }
 ```
 
@@ -114,7 +114,7 @@ Apply it in the app module, next to `com.android.application`. It does nothing i
 ```kotlin
 plugins {
     id("com.android.application")
-    id("io.github.r1b2ns.stackaudit") version "0.4.0"
+    id("io.github.r1b2ns.stackaudit") version "0.4.1"
 }
 
 stackAudit {
@@ -141,7 +141,7 @@ https://github.com/r1b2ns/stack-audit
 Or add it to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.4.0")
+.package(url: "https://github.com/r1b2ns/stack-audit", from: "0.4.1")
 ```
 
 The package requires iOS 15 or later.
@@ -204,11 +204,11 @@ Add the artifacts to the shared module and the no-op twins to release builds of 
 
 ```kotlin
 commonMain.dependencies {
-    implementation("io.github.r1b2ns:stackaudit-core:0.4.0")
-    implementation("io.github.r1b2ns:stackaudit-ktor:0.4.0")
-    implementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.0")
-    implementation("io.github.r1b2ns:stackaudit-settings:0.4.0")
-    implementation("io.github.r1b2ns:stackaudit-ui:0.4.0")
+    implementation("io.github.r1b2ns:stackaudit-core:0.4.1")
+    implementation("io.github.r1b2ns:stackaudit-ktor:0.4.1")
+    implementation("io.github.r1b2ns:stackaudit-sqldelight:0.4.1")
+    implementation("io.github.r1b2ns:stackaudit-settings:0.4.1")
+    implementation("io.github.r1b2ns:stackaudit-ui:0.4.1")
 }
 ```
 
