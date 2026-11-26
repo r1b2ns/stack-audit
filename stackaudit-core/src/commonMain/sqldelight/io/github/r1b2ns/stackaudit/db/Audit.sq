@@ -22,7 +22,9 @@ CREATE TABLE audit_http (
     host TEXT NOT NULL,
     status INTEGER,
     request_hash TEXT,
-    response_hash TEXT
+    response_hash TEXT,
+    request_size INTEGER,
+    response_size INTEGER
 );
 
 CREATE TABLE audit_ref (
@@ -67,7 +69,7 @@ lastSeq:
 SELECT last_insert_rowid();
 
 insertHttp:
-INSERT INTO audit_http(event_seq, method, host, status, request_hash, response_hash) VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO audit_http(event_seq, method, host, status, request_hash, response_hash, request_size, response_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 insertRef:
 INSERT INTO audit_ref(event_seq, hash) VALUES (?, ?);
@@ -81,6 +83,9 @@ DELETE FROM audit_ref;
 insertBlob:
 INSERT OR IGNORE INTO audit_blob(hash, data, size) VALUES (?, ?, ?);
 
+replaceBlob:
+INSERT OR REPLACE INTO audit_blob(hash, data, size) VALUES (?, ?, ?);
+
 blob:
 SELECT data FROM audit_blob WHERE hash = ?;
 
@@ -88,7 +93,7 @@ lastHash:
 SELECT hash FROM audit_event ORDER BY seq DESC LIMIT 1;
 
 summaries:
-SELECT e.id, e.timestamp, e.duration, e.category, e.source, e.title, h.method, h.host, h.status
+SELECT e.id, e.timestamp, e.duration, e.category, e.source, e.title, h.method, h.host, h.status, h.request_size, h.response_size
 FROM audit_event e LEFT JOIN audit_http h ON h.event_seq = e.seq
 WHERE (:category IS NULL OR e.category = :category)
   AND (:query IS NULL OR e.title LIKE '%' || :query || '%')
@@ -112,6 +117,9 @@ SELECT seq FROM audit_event ORDER BY seq LIMIT 1 OFFSET ?;
 
 countEvents:
 SELECT COUNT(*) FROM audit_event;
+
+oldestTimestamp:
+SELECT MIN(timestamp) AS oldest FROM audit_event;
 
 deleteUpTo:
 DELETE FROM audit_event WHERE seq <= ?;

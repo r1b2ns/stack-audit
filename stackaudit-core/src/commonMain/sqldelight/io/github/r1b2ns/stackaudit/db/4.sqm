@@ -1,0 +1,3 @@
+ALTER TABLE audit_http ADD COLUMN request_size INTEGER;
+
+ALTER TABLE audit_http ADD COLUMN response_size INTEGER;

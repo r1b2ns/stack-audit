@@ -97,6 +97,15 @@ public object StackAudit :
 
     public suspend fun clear() {}
 
+    public suspend fun stats(): AuditStats = AuditStats(0, 0, null)
+
+    public fun recordExport(
+        description: String,
+        count: Long,
+    ) {
+        description.hashCode() + count.hashCode()
+    }
+
     public suspend fun purge() {}
 
     public suspend fun verify(): ChainReport = ChainReport(true, 0, null)

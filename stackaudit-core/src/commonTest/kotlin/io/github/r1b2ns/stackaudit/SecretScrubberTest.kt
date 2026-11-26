@@ -46,6 +46,32 @@ class SecretScrubberTest {
     }
 
     @Test
+    fun masksHeadersNamedAfterSecretFields() {
+        val result =
+            scrubber.headers(
+                listOf(
+                    Header("access_token", "7dd29878-e58a-47ad-aeac-373f99965ddd"),
+                    Header("Access-Token", "7dd29878-e58a-47ad-aeac-373f99965ddd"),
+                    Header("X-Request-Id", "7dd29878-e58a-47ad-aeac-373f99965ddd"),
+                    Header("client_secret", "s3cr3t-value-0001"),
+                    Header("token", "abc"),
+                ),
+            )
+        assertEquals("••••5ddd", result[0].value)
+        assertEquals("••••5ddd", result[1].value)
+        assertEquals("7dd29878-e58a-47ad-aeac-373f99965ddd", result[2].value)
+        assertEquals("••••0001", result[3].value)
+        assertEquals("••••", result[4].value)
+    }
+
+    @Test
+    fun allowedFieldNameIsNotMaskedAsHeader() {
+        val custom = SecretScrubber(SecretRules.build { allow("access_token") })
+        val header = Header("access_token", "7dd29878-e58a-47ad-aeac-373f99965ddd")
+        assertEquals(header, custom.headers(listOf(header))[0])
+    }
+
+    @Test
     fun matcherFlagsExtraNames() {
         val custom = SecretScrubber(SecretRules.build { matching { it.startsWith("x-secret") } })
         assertEquals("••••", custom.headers(listOf(Header("X-Secret-Id", "1")))[0].value)

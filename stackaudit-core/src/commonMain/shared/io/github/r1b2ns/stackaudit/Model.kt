@@ -280,6 +280,14 @@ public data class AuditEventSummary(
     val method: String?,
     val host: String?,
     val status: Int?,
+    val requestSize: Long? = null,
+    val responseSize: Long? = null,
+)
+
+public data class AuditStats(
+    val events: Long,
+    val bytes: Long,
+    val oldest: Long?,
 )
 
 public data class ChainReport(
