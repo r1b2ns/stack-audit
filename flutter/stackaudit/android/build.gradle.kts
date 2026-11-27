@@ -16,7 +16,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        mavenLocal()
     }
 }
 
@@ -41,6 +40,6 @@ extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtensi
 }
 
 dependencies {
-    "implementation"("io.github.r1b2ns:stackaudit-android:0.1.0-SNAPSHOT")
-    "implementation"("io.github.r1b2ns:stackaudit-ui:0.1.0-SNAPSHOT")
+    "implementation"("io.github.r1b2ns:stackaudit-android:0.4.1")
+    "implementation"("io.github.r1b2ns:stackaudit-ui:0.4.1")
 }

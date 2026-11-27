@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "stack-audit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/r1b2ns/stack-audit.git",
+      "state" : {
+        "revision" : "ab6919e2b135ccf3feffd2f8ce843baec4c525b9",
+        "version" : "0.4.1"
+      }
+    }
+  ],
+  "version" : 2
+}

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:stackaudit/stackaudit.dart';
+import 'package:stack_audit/stack_audit.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

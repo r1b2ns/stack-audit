@@ -1,7 +1,14 @@
-name: stackaudit
-description: Audit and inspect HTTP traffic, storage, analytics and feature flags in Flutter apps, backed by the StackAudit native libraries.
+name: stack_audit
+description: Debug inspector for Flutter apps. Records HTTP (http and Dio), analytics, feature flags and storage, with secrets masked on the device.
 version: 0.1.0
-repository: https://github.com/r1b2ns/stack-audit
+repository: https://github.com/r1b2ns/stack-audit/tree/main/flutter/stackaudit
+issue_tracker: https://github.com/r1b2ns/stack-audit/issues
+topics:
+  - debugging
+  - network
+  - http
+  - dio
+  - analytics
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

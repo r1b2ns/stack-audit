@@ -152,7 +152,7 @@ The Flutter plugin is in beta: the API may still change between releases. It liv
 
 ```yaml
 dependencies:
-  stackaudit:
+  stack_audit:
     git:
       url: https://github.com/r1b2ns/stack-audit
       path: flutter/stackaudit
@@ -276,7 +276,7 @@ To hook nothing automatically, start with `$0.network = .manual`. Then only sess
 
 ```dart
 import 'package:http/http.dart' as http;
-import 'package:stackaudit/stackaudit.dart';
+import 'package:stack_audit/stack_audit.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -293,7 +293,7 @@ With [Dio](https://pub.dev/packages/dio), add the interceptor instead:
 
 ```dart
 import 'package:dio/dio.dart';
-import 'package:stackaudit/dio.dart';
+import 'package:stack_audit/dio.dart';
 
 final dio = Dio()..interceptors.add(StackAuditDioInterceptor());
 ```

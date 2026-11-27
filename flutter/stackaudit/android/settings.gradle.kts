@@ -1,1 +1,1 @@
-rootProject.name = "stackaudit"
+rootProject.name = "stack_audit"

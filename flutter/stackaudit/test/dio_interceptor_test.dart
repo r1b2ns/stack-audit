@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:stackaudit/dio.dart';
-import 'package:stackaudit/stackaudit.dart';
+import 'package:stack_audit/dio.dart';
+import 'package:stack_audit/stack_audit.dart';
 
 class _FakeAdapter implements HttpClientAdapter {
   _FakeAdapter(this.respond);
