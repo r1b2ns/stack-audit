@@ -8,6 +8,7 @@
 <p align="center">
   <a href="https://central.sonatype.com/namespace/io.github.r1b2ns"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/io.github.r1b2ns/stackaudit-core"></a>
   <a href="https://github.com/r1b2ns/stack-audit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/r1b2ns/stack-audit"></a>
+  <a href="https://pub.dev/packages/stack_audit"><img alt="pub.dev" src="https://img.shields.io/pub/v/stack_audit"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20KMP%20%7C%20Flutter-informational">
   <img alt="Kotlin Multiplatform" src="https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white">
@@ -148,14 +149,18 @@ The package requires iOS 15 or later.
 
 ### Flutter (beta)
 
-The Flutter plugin is in beta: the API may still change between releases. It lives in [`flutter/stackaudit`](flutter/stackaudit) and is not on pub.dev yet. Use a git dependency for now:
+The Flutter plugin is in beta: the API may still change between releases. It is published on pub.dev as [`stack_audit`](https://pub.dev/packages/stack_audit), and its source lives in [`flutter/stackaudit`](flutter/stackaudit).
+
+```bash
+flutter pub add stack_audit
+```
+
+On iOS it needs Flutter's Swift Package Manager support. Turn it on for your app in `pubspec.yaml`:
 
 ```yaml
-dependencies:
-  stack_audit:
-    git:
-      url: https://github.com/r1b2ns/stack-audit
-      path: flutter/stackaudit
+flutter:
+  config:
+    enable-swift-package-manager: true
 ```
 
 ## Quick start
@@ -312,7 +317,7 @@ await StackAudit.recordStorage(
 );
 ```
 
-On iOS the plugin pulls in the Swift package, so Flutter's Swift Package Manager support must be on (`flutter config --enable-swift-package-manager`). On iOS, `captureNativeNetwork` (default `true`) also records URLSession traffic made by native code and plugins, and `shakeToOpen` turns shake to open on or off. Android ignores both options.
+On iOS, `captureNativeNetwork` (default `true`) also records URLSession traffic made by native code and plugins, and `shakeToOpen` turns shake to open on or off. Android ignores both options.
 
 ### WebSocket
 
