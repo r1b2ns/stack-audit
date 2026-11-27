@@ -1,5 +1,6 @@
 package io.github.r1b2ns.stackaudit
 
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
@@ -155,5 +156,57 @@ class SecretScrubberTest {
         assertEquals("""{"token":"••••"}""", scrubber.body("""{"token":"abc"}""", "application/json; charset=utf-8"))
         assertEquals("""{"token":"••••"}""", scrubber.body("""{"token":"abc"}""", null))
         assertEquals("token=abc", scrubber.body("token=abc", "text/plain"))
+    }
+
+
+    @Test
+    fun masksSecretsInsideJsonEncodedStringValues() {
+        val echoed = """{"data":"{\"user\":\"ana\",\"password\":\"hunter2\"}","url":"https://httpbin.org/post"}"""
+        assertEquals(
+            """{"data":"{\"user\":\"ana\",\"password\":\"••••\"}","url":"https://httpbin.org/post"}""",
+            scrubber.json(echoed),
+        )
+    }
+
+    @Test
+    fun masksJsonEncodedStringsInsideArrays() {
+        val events = """{"events":["{\"token\":\"abcdefghijkl1234\"}","plain"]}"""
+        assertEquals("""{"events":["{\"token\":\"••••1234\"}","plain"]}""", scrubber.json(events))
+    }
+
+    @Test
+    fun masksDoubleEncodedBodies() {
+        val body = """"{\"password\":\"hunter2\"}""""
+        assertEquals(""""{\"password\":\"••••\"}"""", scrubber.body(body, "application/json"))
+    }
+
+    @Test
+    fun masksJsonEncodedTwice() {
+        val inner = """{"password":"hunter2"}"""
+        val once = JsonPrimitive(inner).toString()
+        val twice = JsonPrimitive(once).toString()
+        val masked = scrubber.json("""{"payload":$twice}""")
+        assertTrue("hunter2" !in masked, masked)
+        assertTrue("••••" in masked, masked)
+    }
+
+    @Test
+    fun leavesStringsThatOnlyLookLikeJson() {
+        val json = """{"note":"{not json}","list":"[1, 2"}"""
+        assertSame(json, scrubber.json(json))
+    }
+
+    @Test
+    fun leavesJsonEncodedStringsWithoutSecrets() {
+        val json = """{"data":"{\"user\":\"ana\"}"}"""
+        assertSame(json, scrubber.json(json))
+    }
+
+    @Test
+    fun stopsAtTheNestingLimit() {
+        var value = JsonPrimitive("""{"password":"hunter2"}""").toString()
+        repeat(20) { value = JsonPrimitive(value).toString() }
+        val json = """{"deep":$value}"""
+        assertSame(json, scrubber.json(json))
     }
 }

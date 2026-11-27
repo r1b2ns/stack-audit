@@ -49,8 +49,13 @@ public class SecretScrubber(private val rules: SecretRules) {
         return if (changed) parts.joinToString("&") else text
     }
 
-    public fun json(text: String): String {
-        val element = runCatching { Json.parseToJsonElement(text) }.getOrNull() ?: return text
+    public fun json(text: String): String = scrubJson(text, 0) ?: text
+
+    private fun scrubJson(
+        text: String,
+        depth: Int,
+    ): String? {
+        val element = runCatching { Json.parseToJsonElement(text) }.getOrNull() ?: return null
         var changed = false
 
         fun walk(node: JsonElement): JsonElement =
@@ -70,11 +75,26 @@ public class SecretScrubber(private val rules: SecretRules) {
                         },
                     )
                 is JsonArray -> JsonArray(node.map(::walk))
-                else -> node
+                is JsonPrimitive -> {
+                    val nested = if (node.isString && depth < MAX_NESTED_DEPTH && looksLikeJson(node.content)) scrubJson(node.content, depth + 1) else null
+                    if (nested == null) {
+                        node
+                    } else {
+                        changed = true
+                        JsonPrimitive(nested)
+                    }
+                }
             }
 
         val result = walk(element)
-        return if (changed) result.toString() else text
+        return if (changed) result.toString() else null
+    }
+
+    private fun looksLikeJson(value: String): Boolean {
+        val trimmed = value.trim()
+        return (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+            (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+            (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length > 1)
     }
 
     public fun storageValue(
@@ -133,6 +153,7 @@ public class SecretScrubber(private val rules: SecretRules) {
         public const val MASK: String = "••••"
         private const val TAIL = 4
         private const val MIN_TAIL_SOURCE = 12
+        private const val MAX_NESTED_DEPTH = 8
 
         public fun mask(value: String): String {
             if (value.isEmpty() || value.startsWith(MASK)) return value
