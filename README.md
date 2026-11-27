@@ -18,6 +18,12 @@
 </p>
 
 <p align="center">
+  <img src="docs/media/android-request-list.png" alt="StackAudit viewer on Android: request list" width="600">
+  <img src="docs/media/android-request-detail.png" alt="StackAudit viewer on Android: request detail with masked secrets" width="600">
+  <img src="docs/media/android-flags-tab.png" alt="StackAudit viewer on Android: flags tab" width="600">
+</p>
+
+<p align="center">
   <img src="docs/media/viewer.gif" alt="The StackAudit viewer: request list, analytics checked against a tracking plan, search, a request with masked secrets and a feature flag override" width="320">
 </p>
 
